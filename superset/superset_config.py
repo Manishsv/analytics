@@ -1,0 +1,6 @@
+FEATURE_FLAGS = {
+    "ENABLE_TEMPLATE_PROCESSING": True,
+}
+
+# For local dev only
+SQLALCHEMY_TRACK_MODIFICATIONS = False

@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: time_spine
+    description: "Daily time spine used by MetricFlow."
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        description: "Day-level date spine."
+        granularity: day
+        tests:
+          - not_null
+          - unique

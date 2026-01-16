@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: bronze
+    schema: bronze
+    tables:
+      - name: sample_sales
+        description: "Raw IQVIA-like sales fact at pack x geo x month x channel"
+        columns:
+          - name: period_yyyymm
+            tests: [not_null]
+          - name: pack_id
+            tests: [not_null]
+          - name: geo_id
+            tests: [not_null]
+          - name: channel_id
+            tests: [not_null]

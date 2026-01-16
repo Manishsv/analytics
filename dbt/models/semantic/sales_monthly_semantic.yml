@@ -1,0 +1,49 @@
+version: 2
+
+semantic_models:
+  - name: sales_monthly
+    description: >
+      Gold sales fact at period × geo × channel grain.
+      Source: iceberg.gold.gold_sales_monthly (or iceberg.gold.v_sales_monthly).
+
+    model: ref('gold_sales_monthly')
+
+    defaults:
+      agg_time_dimension: period_yyyymm
+
+    entities:
+      - name: sales
+        type: primary
+        expr: "concat(period_yyyymm, '|', geo_id, '|', channel_id)"
+
+    dimensions:
+      - name: period_yyyymm
+        type: time
+        type_params:
+          time_granularity: month
+        expr: period_yyyymm
+        description: "Month in YYYYMM format."
+
+      - name: geo_id
+        type: categorical
+        expr: geo_id
+
+      - name: channel_id
+        type: categorical
+        expr: channel_id
+
+    measures:
+      - name: value_lc
+        description: "Sales value in local currency."
+        agg: sum
+        expr: value_lc
+
+      - name: standard_units
+        description: "Sales volume in standard units (SU)."
+        agg: sum
+        expr: standard_units
+
+      - name: units
+        description: "Sales volume in pack units."
+        agg: sum
+        expr: units

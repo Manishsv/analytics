@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+.venv*/
+env/
+ENV/
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+*.seed
+
+# Temporary files
+/tmp/
+*.tmp

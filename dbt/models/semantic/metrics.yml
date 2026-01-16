@@ -1,0 +1,51 @@
+version: 2
+
+metrics:
+  # --- SALES ---
+  - name: sales_value_lc
+    description: "Total sales value in local currency."
+    type: simple
+    label: "Sales (LC)"
+    type_params:
+      measure: value_lc
+
+  - name: sales_volume_su
+    description: "Total volume in standard units."
+    type: simple
+    label: "Volume (SU)"
+    type_params:
+      measure: standard_units
+
+  - name: sales_volume_units
+    description: "Total volume in pack units."
+    type: simple
+    label: "Volume (Units)"
+    type_params:
+      measure: units
+
+  - name: avg_price_lc_per_su
+    description: "Average price per standard unit (LC/SU)."
+    type: ratio
+    label: "Avg Price (LC per SU)"
+    type_params:
+      numerator: sales_value_lc
+      denominator: sales_volume_su
+
+  # --- GROWTH (commented out until time spine is working) ---
+  # - name: sales_value_lc__yoy
+  #   description: "Sales (LC) shifted by 1 year for YoY comparisons."
+  #   type: time_offset
+  #   label: "Sales (LC) YoY Base"
+  #   type_params:
+  #     metric: sales_value_lc
+  #     offset: "1 year"
+
+  # - name: sales_value_lc_yoy_growth_pct
+  #   description: "Year-over-year growth % of Sales (LC), monthly grain."
+  #   type: derived
+  #   label: "YoY Growth % (Sales LC)"
+  #   type_params:
+  #     expr: "(sales_value_lc - sales_value_lc__yoy) / nullif(sales_value_lc__yoy, 0)"
+  #     metrics:
+  #       - name: sales_value_lc
+  #       - name: sales_value_lc__yoy

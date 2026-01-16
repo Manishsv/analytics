@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <!-- PostgreSQL JDBC connection -->
+  <property>
+    <name>javax.jdo.option.ConnectionURL</name>
+    <value>jdbc:postgresql://postgres:5432/${POSTGRES_DB}</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionDriverName</name>
+    <value>org.postgresql.Driver</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionUserName</name>
+    <value>${POSTGRES_USER}</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionPassword</name>
+    <value>${POSTGRES_PASSWORD}</value>
+  </property>
+
+  <!-- Metastore thrift -->
+  <property>
+    <name>metastore.thrift.uris</name>
+    <value>thrift://metastore:9083</value>
+  </property>
+
+  <!-- Warehouse directory in MinIO - using s3:// for Trino compatibility -->
+  <!-- Note: Metastore can handle both s3a:// and s3://, but Trino requires s3:// -->
+  <property>
+    <name>hive.metastore.warehouse.dir</name>
+    <value>s3://warehouse/</value>
+  </property>
+
+  <!-- S3A settings for MinIO -->
+  <property>
+    <name>fs.s3a.endpoint</name>
+    <value>http://minio:9000</value>
+  </property>
+  <property>
+    <name>fs.s3a.path.style.access</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>fs.s3a.connection.ssl.enabled</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>fs.s3a.access.key</name>
+    <value>${env:MINIO_ROOT_USER}</value>
+  </property>
+  <property>
+    <name>fs.s3a.secret.key</name>
+    <value>${env:MINIO_ROOT_PASSWORD}</value>
+  </property>
+</configuration>

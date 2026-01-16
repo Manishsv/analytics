@@ -1,0 +1,7 @@
+version: 2
+
+metricflow:
+  time_spine:
+    model: time_spine
+    column: date_day
+    granularity: day

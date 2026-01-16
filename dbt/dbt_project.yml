@@ -1,0 +1,24 @@
+name: "dap"
+version: "1.0.0"
+config-version: 2
+
+profile: "dap"
+
+model-paths: ["models"]
+
+models:
+  dap:
+    +materialized: table
+    bronze:
+      +schema: bronze
+      +materialized: view
+    silver:
+      +schema: silver
+      +materialized: table
+    gold:
+      +schema: gold
+      +materialized: table
+    semantic:
+      time_spine:
+        +schema: gold
+        +materialized: table

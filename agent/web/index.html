@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI enabled Data Analytics Demo - Chat Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background: #f8fafc;
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .message.user .avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message.assistant .avatar {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .message-content {
+            flex: 1;
+            max-width: 70%;
+        }
+
+        .message.user .message-content {
+            text-align: right;
+        }
+
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-bubble {
+            background: white;
+            color: #1e293b;
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 4px;
+        }
+
+        .query-plan {
+            margin-top: 12px;
+            padding: 12px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+            font-size: 13px;
+        }
+
+        .query-plan h4 {
+            color: #475569;
+            margin-bottom: 8px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .query-plan-item {
+            margin: 4px 0;
+            color: #64748b;
+        }
+
+        .query-plan-item strong {
+            color: #1e293b;
+        }
+
+        .query-results {
+            margin-top: 12px;
+            padding: 16px;
+            background: #f0fdf4;
+            border-radius: 8px;
+            border-left: 3px solid #22c55e;
+            overflow-x: auto;
+        }
+
+        .query-results table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .error {
+            background: #fef2f2;
+            border-left-color: #ef4444;
+            color: #dc2626;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e2e8f0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .input-container {
+            padding: 20px 24px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 24px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-field:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .send-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .welcome-message {
+            text-align: center;
+            color: #64748b;
+            padding: 40px 20px;
+        }
+
+        .welcome-message h2 {
+            color: #1e293b;
+            margin-bottom: 12px;
+        }
+
+        .example-queries {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
+        .example-query {
+            padding: 8px 16px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .example-query:hover {
+            border-color: #667eea;
+            color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .metrics-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .metric-tag {
+            padding: 4px 8px;
+            background: #ede9fe;
+            color: #7c3aed;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>📊 AI enabled Data Analytics Demo</h1>
+                <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">
+                    Ask questions about your data metrics
+                </div>
+            </div>
+            <div class="status">
+                <div class="status-dot"></div>
+                <span>Connected</span>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="welcome-message">
+                <h2>👋 Welcome to AI enabled Data Analytics Demo</h2>
+                <p>Ask natural language questions about your metrics and dimensions.</p>
+                <div class="example-queries">
+                    <div class="example-query" onclick="sendExample('Sales value by geo and channel')">Sales value by geo and channel</div>
+                    <div class="example-query" onclick="sendExample('Average price per standard unit by channel')">Average price per standard unit</div>
+                    <div class="example-query" onclick="sendExample('Sales volume in standard units by geo')">Sales volume by geo</div>
+                </div>
+                <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+                    <div style="font-size: 12px; color: #64748b; margin-bottom: 8px;">Available Metrics:</div>
+                    <div class="metrics-list" id="metricsList">
+                        <span class="metric-tag">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <input 
+                type="text" 
+                class="input-field" 
+                id="messageInput" 
+                placeholder="Ask a question about your metrics..."
+                onkeypress="handleKeyPress(event)"
+            />
+            <button class="send-button" id="sendButton" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        let availableMetrics = [];
+        let availableDimensions = [];
+
+        // Load catalog on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadCatalog();
+            setupInput();
+        });
+
+        async function loadCatalog() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/catalog`);
+                const data = await response.json();
+                
+                // Parse metrics from raw text
+                const metricsMatch = data.metrics_raw.match(/• ([^:]+):/g);
+                if (metricsMatch) {
+                    availableMetrics = metricsMatch.map(m => m.replace(/• |:/g, '').trim());
+                }
+
+                // Update UI
+                const metricsList = document.getElementById('metricsList');
+                if (availableMetrics.length > 0) {
+                    metricsList.innerHTML = availableMetrics
+                        .map(m => `<span class="metric-tag">${m}</span>`)
+                        .join('');
+                } else {
+                    metricsList.innerHTML = '<span class="metric-tag">No metrics found</span>';
+                }
+            } catch (error) {
+                console.error('Failed to load catalog:', error);
+                document.getElementById('metricsList').innerHTML = 
+                    '<span class="metric-tag" style="background:#fee2e2;color:#dc2626;">Failed to load</span>';
+            }
+        }
+
+        function setupInput() {
+            const input = document.getElementById('messageInput');
+            input.focus();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function sendExample(question) {
+            document.getElementById('messageInput').value = question;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const question = input.value.trim();
+            
+            if (!question) return;
+
+            // Disable input while processing
+            input.disabled = true;
+            document.getElementById('sendButton').disabled = true;
+
+            // Add user message to chat
+            addMessage('user', question);
+            input.value = '';
+
+            // Add loading message
+            const loadingId = addMessage('assistant', '', true);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/nlq`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        limit: 200
+                    })
+                });
+
+                const data = await response.json();
+
+                // Remove loading message
+                removeMessage(loadingId);
+
+                // Check if query was successful (returncode 0 means success)
+                if (response.ok && data.execution.returncode === 0) {
+                    // Display plan and results
+                    let content = `Here are the results for your query:`;
+                    
+                    // Add plan details
+                    if (data.plan) {
+                        content += `<div class="query-plan">
+                            <h4>📋 Query Plan</h4>
+                            <div class="query-plan-item"><strong>Metrics:</strong> ${data.plan.metrics.join(', ')}</div>
+                            ${data.plan.dimensions.length > 0 ? `<div class="query-plan-item"><strong>Dimensions:</strong> ${data.plan.dimensions.join(', ')}</div>` : ''}
+                            ${data.plan.filters && data.plan.filters.length > 0 ? `<div class="query-plan-item"><strong>Filters:</strong> ${JSON.stringify(data.plan.filters)}</div>` : ''}
+                            ${data.plan.start_time || data.plan.end_time ? `<div class="query-plan-item"><strong>Time Range:</strong> ${data.plan.start_time || '...'} to ${data.plan.end_time || '...'}</div>` : ''}
+                        </div>`;
+                    }
+
+                    // Check if stdout has actual results or an error message
+                    if (data.execution.stdout) {
+                        const stdoutLower = data.execution.stdout.toLowerCase();
+                        if (stdoutLower.includes('error') || stdoutLower.includes('exception') || stdoutLower.includes('failed')) {
+                            // Query failed even though returncode was 0
+                            const cleanError = formatErrorMessage(data.execution.stdout);
+                            addMessage('assistant', `❌ Query Error: ${cleanError}`, false, true);
+                        } else if (data.execution.stdout.trim().length > 0) {
+                            // Has valid results
+                            const formattedOutput = formatQueryResults(data.execution.stdout);
+                            content += `<div class="query-results">${formattedOutput}</div>`;
+                            addMessage('assistant', content);
+                        } else {
+                            // Empty results
+                            content += `<div class="query-results">No results found for the specified filters.</div>`;
+                            addMessage('assistant', content);
+                        }
+                    } else {
+                        content += `<div class="query-results">No results returned.</div>`;
+                        addMessage('assistant', content);
+                    }
+                } else {
+                    // Query failed - extract actual error from stdout or stderr
+                    let errorMsg = data.detail || 'An error occurred';
+                    
+                    // Prioritize stdout for error messages (MetricFlow puts errors there)
+                    if (data.execution?.stdout) {
+                        const stdoutLower = data.execution.stdout.toLowerCase();
+                        if (stdoutLower.includes('error') || stdoutLower.includes('exception') || stdoutLower.includes('failed')) {
+                            errorMsg = formatErrorMessage(data.execution.stdout);
+                        }
+                    }
+                    
+                    // Fall back to stderr only if stdout doesn't have an error
+                    if (!errorMsg.includes('ERROR') && !errorMsg.includes('Exception') && data.execution?.stderr) {
+                        const stderrLines = data.execution.stderr.split('\n').filter(line => {
+                            const lower = line.toLowerCase();
+                            // Filter out INFO messages and warnings that aren't errors
+                            return !lower.includes('info:') && 
+                                   !lower.includes('warning:') &&
+                                   !lower.includes('keyring') &&
+                                   !lower.includes('oauth2') &&
+                                   lower.trim().length > 0;
+                        });
+                        if (stderrLines.length > 0) {
+                            errorMsg = stderrLines.join('\n');
+                        }
+                    }
+                    
+                    // Add helpful context
+                    if (data.plan) {
+                        let errorContent = `<div class="query-plan">
+                            <h4>⚠️ Query Plan (Failed)</h4>
+                            <div class="query-plan-item"><strong>Metrics:</strong> ${data.plan.metrics.join(', ')}</div>
+                            ${data.plan.dimensions.length > 0 ? `<div class="query-plan-item"><strong>Dimensions:</strong> ${data.plan.dimensions.join(', ')}</div>` : ''}
+                            ${data.plan.filters && data.plan.filters.length > 0 ? `<div class="query-plan-item"><strong>Filters:</strong> ${JSON.stringify(data.plan.filters)}</div>` : ''}
+                            ${data.plan.start_time || data.plan.end_time ? `<div class="query-plan-item"><strong>Time Range:</strong> ${data.plan.start_time || '...'} to ${data.plan.end_time || '...'}</div>` : ''}
+                        </div>`;
+                        // Format error message with line breaks preserved
+                        const formattedError = errorMsg.replace(/\n/g, '<br/>');
+                        errorContent += `<div class="error" style="margin-top: 12px; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #ef4444; white-space: pre-wrap;">${formattedError}</div>`;
+                        addMessage('assistant', errorContent, false, true);
+                    } else {
+                        addMessage('assistant', `❌ Error: ${escapeHtml(errorMsg)}`, false, true);
+                    }
+                }
+            } catch (error) {
+                // Remove loading message
+                removeMessage(loadingId);
+                
+                // Display error
+                addMessage('assistant', `❌ Error: ${escapeHtml(error.message)}`, false, true);
+            } finally {
+                // Re-enable input
+                input.disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                input.focus();
+
+                // Scroll to bottom
+                const chatContainer = document.getElementById('chatContainer');
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+
+        function addMessage(type, content, isLoading = false, isError = false) {
+            const chatContainer = document.getElementById('chatContainer');
+            
+            // Remove welcome message if it exists
+            const welcomeMsg = chatContainer.querySelector('.welcome-message');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+
+            const messageId = `msg-${Date.now()}-${Math.random()}`;
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.id = messageId;
+
+            const avatar = document.createElement('div');
+            avatar.className = 'avatar';
+            avatar.textContent = type === 'user' ? 'U' : '🤖';
+            messageDiv.appendChild(avatar);
+
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble' + (isError ? ' error' : '');
+            
+            if (isLoading) {
+                bubble.innerHTML = '<div class="loading"></div> Processing...';
+            } else {
+                bubble.innerHTML = content;
+            }
+
+            messageContent.appendChild(bubble);
+            messageDiv.appendChild(messageContent);
+            chatContainer.appendChild(messageDiv);
+
+            // Scroll to bottom
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            return messageId;
+        }
+
+        function removeMessage(messageId) {
+            const message = document.getElementById(messageId);
+            if (message) {
+                message.remove();
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatQueryResults(stdout) {
+            // Filter out progress messages and spinner animations
+            const lines = stdout.split('\n').filter(line => {
+                const trimmed = line.trim();
+                // Remove empty lines, spinner lines, progress messages, and separator lines
+                return trimmed.length > 0 && 
+                       !trimmed.includes('Initiating') && 
+                       !trimmed.includes('Success') &&
+                       !trimmed.includes('⠋') &&
+                       !trimmed.includes('⠙') &&
+                       !trimmed.includes('⠹') &&
+                       !trimmed.includes('⠸') &&
+                       !trimmed.includes('✔') &&
+                       !trimmed.match(/^[─=]+$/); // Separator lines with only dashes/equals
+            });
+
+            if (lines.length === 0) {
+                return '<div style="color: #64748b;">No results returned.</div>';
+            }
+
+            // Try to detect if it's a table format (has header and data rows)
+            const headerIndex = lines.findIndex(line => line.match(/^[a-zA-Z_][a-zA-Z0-9_\s]+\|/));
+            let headers = [];
+            let dataRows = [];
+
+            if (lines.length >= 2) {
+                // Try to parse as table
+                const firstLine = lines[0].trim();
+                const secondLine = lines[1].trim();
+                
+                // Check if second line is a separator (dashes/equals)
+                if (secondLine.match(/^[-=]+$/)) {
+                    // It's a table format
+                    headers = firstLine.split(/\s{2,}/).map(h => h.trim()).filter(h => h.length > 0);
+                    dataRows = lines.slice(2).map(line => {
+                        return line.split(/\s{2,}/).map(c => c.trim()).filter(c => c.length > 0);
+                    }).filter(row => row.length === headers.length && row.some(cell => cell.length > 0));
+                } else {
+                    // Not a table, treat all as data
+                    dataRows = lines.map(line => [line.trim()]);
+                }
+            }
+
+            // If we have a proper table, format it as HTML table
+            if (headers.length > 0 && dataRows.length > 0) {
+                let html = '<table style="width: 100%; border-collapse: collapse; margin-top: 8px;">';
+                
+                // Header row
+                html += '<thead><tr style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">';
+                headers.forEach(header => {
+                    html += `<th style="padding: 10px 12px; text-align: left; font-weight: 600; color: #475569; font-size: 12px;">${escapeHtml(header)}</th>`;
+                });
+                html += '</tr></thead>';
+                
+                // Data rows
+                html += '<tbody>';
+                dataRows.forEach((row, idx) => {
+                    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+                    html += `<tr style="background: ${bgColor};">`;
+                    row.forEach((cell, cellIdx) => {
+                        // Format numbers in cells
+                        let formattedCell = formatCellValue(cell);
+                        const align = isNumeric(formattedCell) ? 'right' : 'left';
+                        html += `<td style="padding: 10px 12px; text-align: ${align}; color: #1e293b; font-size: 13px;">${escapeHtml(formattedCell)}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+                
+                return html;
+            } else {
+                // Fallback: format as simple text
+                const formattedLines = lines.map(line => {
+                    // Format numbers in the line
+                    const scientificNotationRegex = /(\d+\.?\d*[eE][+-]?\d+)/g;
+                    let formattedLine = line.replace(scientificNotationRegex, (match) => {
+                        const num = parseFloat(match);
+                        if (isNaN(num)) return match;
+                        if (Math.abs(num) >= 1000) {
+                            return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                        }
+                        return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+                    });
+                    return escapeHtml(formattedLine);
+                });
+                return `<div style="font-family: monospace; white-space: pre-wrap;">${formattedLines.join('\n')}</div>`;
+            }
+        }
+
+        function formatCellValue(value) {
+            // Format scientific notation
+            const scientificNotationRegex = /(\d+\.?\d*[eE][+-]?\d+)/;
+            if (scientificNotationRegex.test(value)) {
+                const num = parseFloat(value);
+                if (!isNaN(num)) {
+                    if (Math.abs(num) >= 1000) {
+                        return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                    } else if (Math.abs(num) < 0.01 && num !== 0) {
+                        return num.toExponential(2);
+                    } else {
+                        return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+                    }
+                }
+            }
+            // Try to format regular numbers with commas
+            const num = parseFloat(value);
+            if (!isNaN(num) && isFinite(num) && value.trim() !== '' && !isNaN(value)) {
+                if (Math.abs(num) >= 1000 && !value.includes('.')) {
+                    return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                }
+            }
+            return value;
+        }
+
+        function isNumeric(str) {
+            if (str === '' || str === null || str === undefined) return false;
+            const num = parseFloat(str);
+            return !isNaN(num) && isFinite(num);
+        }
+
+        function formatErrorMessage(errorOutput) {
+            // First, try to translate technical errors to user-friendly messages
+            const userFriendlyError = translateTechnicalError(errorOutput);
+            if (userFriendlyError) {
+                return userFriendlyError;
+            }
+            
+            // Extract the actual error message from MetricFlow output
+            const lines = errorOutput.split('\n');
+            
+            // Look for ERROR line
+            let errorLine = lines.find(line => line.trim().startsWith('ERROR:'));
+            if (errorLine) {
+                errorLine = errorLine.replace('ERROR:', '').trim();
+            }
+            
+            // Look for TrinoUserError message
+            const trinoErrorMatch = errorOutput.match(/message="([^"]+)"/);
+            if (trinoErrorMatch) {
+                const trinoMsg = trinoErrorMatch[1];
+                // Try to translate this technical error
+                const translated = translateTechnicalError(trinoMsg);
+                if (translated) {
+                    return translated;
+                }
+                // Simplify long function signature errors
+                if (trinoMsg.includes('Unexpected parameters')) {
+                    return trinoMsg.split('. Expected:')[0] + '. Check function parameters.';
+                }
+                return trinoMsg;
+            }
+            
+            // Look for general error patterns
+            const errorPatterns = [
+                /ERROR: ([^\n]+)/i,
+                /Exception: ([^\n]+)/i,
+                /Error: ([^\n]+)/i
+            ];
+            
+            for (const pattern of errorPatterns) {
+                const match = errorOutput.match(pattern);
+                if (match && match[1]) {
+                    const translated = translateTechnicalError(match[1]);
+                    return translated || match[1].trim();
+                }
+            }
+            
+            // Fallback: return first meaningful line
+            const meaningfulLines = lines.filter(line => {
+                const trimmed = line.trim();
+                return trimmed.length > 0 && 
+                       !trimmed.includes('Initiating') &&
+                       !trimmed.includes('⠋') &&
+                       !trimmed.includes('Log File') &&
+                       !trimmed.includes('Artifact Path') &&
+                       !trimmed.includes('If you think');
+            });
+            
+            const fallbackMsg = meaningfulLines.slice(0, 3).join(' ').trim() || errorOutput;
+            const translated = translateTechnicalError(fallbackMsg);
+            return translated || fallbackMsg;
+        }
+
+        function translateTechnicalError(errorText) {
+            const lowerError = errorText.toLowerCase();
+            
+            // Date/Time dimension errors
+            if (lowerError.includes('date_trunc') && (lowerError.includes('varchar') || lowerError.includes('unexpected parameters'))) {
+                return `⚠️ Time filtering issue: The time dimension uses a custom format (YYYYMM) that doesn't support date range filtering.\n\n` +
+                       `💡 Try instead:\n` +
+                       `• Use period filters (e.g., "for period 202412" or "for 2024")\n` +
+                       `• Ask without date ranges (e.g., "sales for Karnataka")\n` +
+                       `• Specify the period directly (e.g., "sales for Karnataka in 202412")`;
+            }
+            
+            // Function not found errors
+            if (lowerError.includes('function not found') || lowerError.includes('function_not_found')) {
+                const funcMatch = errorText.match(/function[_\s]+not[_\s]+found[^\w]*([a-zA-Z_]+)/i);
+                if (funcMatch) {
+                    return `⚠️ Query processing error: The function "${funcMatch[1]}" is not available.\n\n` +
+                           `💡 This might be due to data format compatibility. Try:\n` +
+                           `• Simplifying your query\n` +
+                           `• Using different time filters\n` +
+                           `• Contact support if the issue persists`;
+                }
+                return `⚠️ Query processing error: A required function is not available for this query.\n\n` +
+                       `💡 Try simplifying your query or using different filters.`;
+            }
+            
+            // Column not found errors - specifically for filters
+            if (lowerError.includes('column') && (lowerError.includes('cannot be resolved') || lowerError.includes('does not exist'))) {
+                const colMatch = errorText.match(/column[_\s]+['"]?([^'"]+)['"]?/i);
+                const colName = colMatch ? colMatch[1] : '';
+                
+                // Check if it's a filter dimension issue
+                if (colName.includes('__') && colName.includes('_id') || colName.includes('_geo') || colName.includes('_channel')) {
+                    return `⚠️ Filter dimension error: The dimension "${colName}" cannot be used directly in filters.\n\n` +
+                           `💡 When filtering by a dimension, it needs to be included in the query dimensions first.\n\n` +
+                           `Try rephrasing your question to include the dimension in the results:\n` +
+                           `• Instead of: "sales for GEO_345"\n` +
+                           `• Try: "sales by geo for GEO_345" or "sales for GEO_345 by geo"\n\n` +
+                           `This ensures the dimension is included in the query, allowing filtering.`;
+                }
+                
+                if (colMatch) {
+                    return `⚠️ Column error: The column "${colMatch[1]}" is not available.\n\n` +
+                           `💡 This might be a typo or the dimension might not exist. Try:\n` +
+                           `• Checking available dimensions using the catalog\n` +
+                           `• Using a different dimension name`;
+                }
+                return `⚠️ Column error: A column referenced in the query doesn't exist.\n\n` +
+                       `💡 Please check your filter values or dimension names.`;
+            }
+            
+            // Filter value errors (common for geo filters)
+            if (lowerError.includes('filter') && lowerError.includes('value')) {
+                return `⚠️ Filter error: The filter value might not match available data.\n\n` +
+                       `💡 Try:\n` +
+                       `• Using exact dimension values (check available values)\n` +
+                       `• Removing specific filters to see all data\n` +
+                       `• Using different dimension values`;
+            }
+            
+            // Generic database errors
+            if (lowerError.includes('database error') || lowerError.includes('trino error')) {
+                return `⚠️ Database query error: The query could not be executed.\n\n` +
+                       `💡 This might be due to:\n` +
+                       `• Incompatible time filters (try using period filters instead of date ranges)\n` +
+                       `• Invalid filter values\n` +
+                       `• Data format issues\n\n` +
+                       `Try simplifying your query or removing time-based filters.`;
+            }
+            
+            // Connection/timeout errors
+            if (lowerError.includes('timeout') || lowerError.includes('connection')) {
+                return `⚠️ Connection timeout: The query took too long to execute.\n\n` +
+                       `💡 Try:\n` +
+                       `• Adding more specific filters to reduce data volume\n` +
+                       `• Using a smaller time range\n` +
+                       `• Retrying the query`;
+            }
+            
+            // No matching error pattern found
+            return null;
+        }
+    </script>
+</body>
+</html>
