@@ -4,9 +4,102 @@ FastAPI service that wraps MetricFlow CLI for natural language to SQL queries vi
 
 ## Features
 
+- **Natural Language Queries**: Convert questions to SQL via LLM planning
 - **Discoverability**: List available metrics and dimensions via `/catalog`
 - **Query Execution**: Execute MetricFlow queries with guardrails via `/query`
-- **Guardrails**: Timeouts, row limits, input validation
+- **PGR Demo Mode**: Automated demo that runs 10 PGR queries sequentially
+- **Guardrails**: Timeouts, row limits, input validation, allowlist enforcement
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+1. **Docker Compose stack running** (MinIO, Nessie, Trino):
+   ```bash
+   cd /path/to/analytics
+   docker-compose up -d
+   ```
+
+2. **dbt project configured** with semantic models and metrics
+
+3. **Ollama running** with `gpt-oss:120b-cloud` model:
+   ```bash
+   ollama serve
+   ollama pull gpt-oss:120b-cloud
+   ```
+
+4. **Python 3.10** with MetricFlow installed (see Setup section below)
+
+### Quick Start (5 minutes)
+
+1. **Activate Python environment**:
+   ```bash
+   cd /path/to/analytics
+   source .venv310/bin/activate
+   ```
+
+2. **Install FastAPI dependencies**:
+   ```bash
+   pip install -r agent/requirements.txt
+   ```
+
+3. **Start the agent service**:
+   ```bash
+   cd agent
+   uvicorn app.main:app --reload --port 8000
+   ```
+   
+   You should see:
+   ```
+   INFO:     Uvicorn running on http://127.0.0.1:8000
+   INFO:     Loaded allowlist: X metrics, Y dimensions
+   ```
+
+4. **Open the web UI**:
+   - Open `agent/web/index.html` in your browser
+   - Or serve it via a simple HTTP server:
+     ```bash
+     cd agent/web
+     python3 -m http.server 8080
+     ```
+   - Navigate to `http://localhost:8080`
+
+5. **Run the PGR Demo**:
+   - Click the **"🎬 Run PGR Demo"** button in the web UI header
+   - Watch as 10 PGR queries execute automatically:
+     - Total complaints
+     - Complaints by ward
+     - Complaints for specific ward
+     - Top ward with open complaints
+     - Daily/monthly trends
+     - Resolution rates
+     - SLA breach analysis
+     - And more!
+
+### Verify Installation
+
+1. **Health check**:
+   ```bash
+   curl http://localhost:8000/health
+   # Should return: {"status":"ok"}
+   ```
+
+2. **Catalog check**:
+   ```bash
+   curl http://localhost:8000/catalog | python -m json.tool
+   # Should return metrics and dimensions
+   ```
+
+3. **Test NLQ query**:
+   ```bash
+   curl -X POST http://localhost:8000/nlq \
+     -H "Content-Type: application/json" \
+     -d '{"question":"total complaints","limit":10}'
+   ```
+
+---
 
 ## Setup
 
@@ -70,6 +163,39 @@ curl -X POST http://localhost:8000/nlq \
 
 Returns both the LLM-generated plan and execution results.
 
+## Web UI
+
+The web UI provides a chat-like interface for natural language queries with:
+- **PGR Demo Mode**: One-click automated demo
+- **Persistent Catalog Sidebar**: Always-accessible metrics and dimensions
+- **Smart Formatting**: Automatic number and date formatting
+- **Top N Query Support**: Automatic aggregation for "which X has the most Y" queries
+
+### Running the Web UI
+
+**Option 1: Direct file open** (simplest):
+```bash
+# Open in browser
+open agent/web/index.html  # macOS
+xdg-open agent/web/index.html  # Linux
+```
+
+**Option 2: HTTP server** (recommended for CORS):
+```bash
+cd agent/web
+python3 -m http.server 8080
+# Navigate to http://localhost:8080
+```
+
+**Option 3: Serve from agent directory**:
+```bash
+cd agent
+python3 -m http.server 8080
+# Navigate to http://localhost:8080/web/index.html
+```
+
+The web UI connects to the agent service at `http://localhost:8000` by default.
+
 ## Environment Variables
 
 - `DBT_PROJECT_DIR`: Path to dbt project (default: `../dbt`)
@@ -77,12 +203,15 @@ Returns both the LLM-generated plan and execution results.
 - `OLLAMA_BASE_URL`: Ollama API base URL (default: `http://localhost:11434`)
 - `OLLAMA_MODEL`: Ollama model name (default: `gpt-oss:120b-cloud`)
 
-## Features
+## Advanced Features
 
 - **Natural Language Queries**: `/nlq` endpoint uses LLM to plan queries from natural language
 - **Allowlist Enforcement**: Metrics and dimensions validated against catalog at startup
 - **Safe Filter Compilation**: Structured filters compiled to safe WHERE clauses (no SQL injection)
-- **Guardrails**: Timeouts, row limits, input validation
+- **Time Granularity Support**: Automatic detection and aggregation for day/week/month/year
+- **Top N Query Handling**: Client-side aggregation for "which X has the most Y" queries
+- **Case Sensitivity**: Automatic normalization for status filters (e.g., "Closed" → "CLOSED")
+- **Query Explanation**: Returns metric definitions, dimensions, and filters for audit
 
 ## Guardrails
 
@@ -95,7 +224,7 @@ Returns both the LLM-generated plan and execution results.
 
 ## Testing
 
-See [TESTING.md](TESTING.md) for detailed test cases and troubleshooting.
+See [tests/README.md](tests/README.md) for comprehensive test suite documentation.
 
 ### Quick Test Commands
 
@@ -109,10 +238,47 @@ curl http://localhost:8000/catalog | python -m json.tool
 # 3. Structured query
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
-  -d '{"metrics":["sales_value_lc"],"dimensions":["sales__geo_id","sales__channel_id"],"limit":50}'
+  -d '{"metrics":["pgr_complaints"],"dimensions":["complaint__ward_id"],"limit":50}'
 
-# 4. Natural language query
+# 4. Natural language query (PGR)
 curl -X POST http://localhost:8000/nlq \
   -H "Content-Type: application/json" \
-  -d '{"question":"Sales value by geo and channel","limit":50}'
+  -d '{"question":"total complaints by ward","limit":50}'
+
+# 5. Top N query
+curl -X POST http://localhost:8000/nlq \
+  -H "Content-Type: application/json" \
+  -d '{"question":"which ward has the most complaints that are not closed","limit":1}'
 ```
+
+### Running the Test Suite
+
+```bash
+# Run comprehensive test suite (34+ test cases)
+cd agent
+pytest tests/test_ai_comprehensive.py -v
+
+# Run specific test category
+pytest tests/test_ai_comprehensive.py::test_basic_queries -v
+
+# Run with coverage
+pytest tests/ --cov=app --cov-report=html
+```
+
+## Troubleshooting
+
+### Service won't start
+- Check that Ollama is running: `curl http://localhost:11434/api/tags`
+- Verify dbt project path is correct
+- Check Python environment has MetricFlow installed: `mf --version`
+
+### Web UI can't connect
+- Verify agent service is running on port 8000
+- Check browser console for CORS errors
+- Try hard refresh: `Cmd+Shift+R` (Mac) or `Ctrl+Shift+R` (Windows)
+
+### Queries failing
+- Check MetricFlow config: `mf validate-configs`
+- Verify semantic models are defined in dbt
+- Check Trino connection: `docker-compose ps trino`
+- Review agent logs for detailed error messages

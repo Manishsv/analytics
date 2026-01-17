@@ -1,34 +1,124 @@
-# Data Analytics Platform - Docker Compose Setup
+# Data Analytics Platform
 
-Base Docker Compose development environment with MinIO (S3) + Iceberg (Nessie catalog) + Trino + Superset.
+A modern, open-source analytics stack built on MinIO (S3) + Iceberg (Nessie catalog) + Trino + dbt + MetricFlow + AI-powered natural language queries.
 
-## Prerequisites
+## ✨ Key Features
 
-- Docker Desktop (or Docker Engine) + Docker Compose v2
-- git
-- Optional: make
+- **🏗️ Bronze/Silver/Gold Architecture**: Layered data lakehouse with Iceberg tables
+- **🤖 AI-Powered NLQ**: Natural language queries with LLM planning and MetricFlow execution
+- **📊 PGR Demo Mode**: Automated demo showcasing complaint analytics capabilities
+- **🔍 Semantic Layer**: MetricFlow-powered metrics and dimensions abstraction
+- **⚡ Real-time Queries**: Trino SQL engine with native S3 filesystem
+- **📈 BI Integration**: Apache Superset for dashboards and visualizations
 
-## Quick Start
+## 🚀 Quick Start (10 minutes)
 
-1. **Start all services:**
-   ```bash
-   docker compose up -d
-   ```
+### Prerequisites
 
-2. **Initialize Superset (one-time):**
-   ```bash
-   docker exec -it dap-superset superset db upgrade
-   docker exec -it dap-superset superset fab create-admin \
-     --username admin --firstname Admin --lastname User \
-     --email admin@example.com --password admin
-   docker exec -it dap-superset superset init
-   ```
+- **Docker Desktop** (or Docker Engine) + Docker Compose v2
+- **Python 3.10** with virtual environment support
+- **Ollama** installed and running (for AI agent)
 
-3. **Access services:**
-   - MinIO Console: http://localhost:9001 (login with `.env` credentials)
-   - Nessie API: http://localhost:19120/api/v2/config
-   - Trino UI: http://localhost:8090 (changed from 8080 to avoid conflicts)
-   - Superset: http://localhost:8088
+### Step 1: Start Infrastructure
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd analytics
+
+# Start all services (MinIO, Nessie, Trino, Superset)
+docker compose up -d
+
+# Wait for services to be healthy (about 30 seconds)
+docker compose ps
+```
+
+### Step 2: Setup Python Environment
+
+```bash
+# Create and activate Python 3.10 virtual environment
+python3.10 -m venv .venv310
+source .venv310/bin/activate  # On Windows: .venv310\Scripts\activate
+
+# Install dependencies (dbt + MetricFlow)
+pip install dbt-trino metricflow[trino]
+```
+
+### Step 3: Setup Ollama (for AI Agent)
+
+```bash
+# Install Ollama (if not already installed)
+# macOS: brew install ollama
+# Linux: curl -fsSL https://ollama.com/install.sh | sh
+
+# Start Ollama service
+ollama serve
+
+# Pull the model (in another terminal)
+ollama pull gpt-oss:120b-cloud
+```
+
+### Step 4: Run dbt Models
+
+```bash
+# Ensure you're in the virtual environment
+source .venv310/bin/activate
+
+# Run dbt models to create Silver and Gold layers
+cd dbt
+dbt run
+
+# Build semantic models for MetricFlow
+dbt parse
+```
+
+### Step 5: Start AI Agent Service
+
+```bash
+# Install FastAPI dependencies
+pip install -r agent/requirements.txt
+
+# Start the agent service
+cd agent
+uvicorn app.main:app --reload --port 8000
+```
+
+You should see:
+```
+INFO:     Uvicorn running on http://127.0.0.1:8000
+INFO:     Loaded allowlist: X metrics, Y dimensions
+```
+
+### Step 6: Launch Web UI & Run PGR Demo
+
+```bash
+# Option 1: Open directly in browser
+open agent/web/index.html  # macOS
+# Or navigate to: file:///path/to/analytics/agent/web/index.html
+
+# Option 2: Serve via HTTP server (recommended)
+cd agent/web
+python3 -m http.server 8080
+# Navigate to: http://localhost:8080
+```
+
+**🎬 Try the PGR Demo:**
+1. Click the **"🎬 Run PGR Demo"** button in the web UI header
+2. Watch as 10 pre-configured PGR queries execute automatically
+3. Explore complaint analytics capabilities including:
+   - Total complaints and trends
+   - Complaints by ward/channel
+   - Top wards with open complaints
+   - Resolution rates and SLA breaches
+   - Average time to resolve
+
+### Step 7: Access Services
+
+- **Web UI**: http://localhost:8080 (after starting HTTP server)
+- **Agent API**: http://localhost:8000
+- **MinIO Console**: http://localhost:9001 (login with `.env` credentials)
+- **Trino UI**: http://localhost:8090
+- **Superset**: http://localhost:8088 (optional)
 
 ## Smoke Test
 
@@ -69,37 +159,110 @@ SELECT * FROM iceberg.bronze.sample_sales;
 
 **Note**: Bronze/Silver/Gold schemas are pre-created. All tables use Nessie catalog and MinIO (native S3) storage.
 
-## Documentation
+## 📚 Documentation
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture and design
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture and design (v1.1)
 - **[INGESTION.md](INGESTION.md)** - Data ingestion workflows and examples
 - **[NEXT_STEPS.md](NEXT_STEPS.md)** - Roadmap and future enhancements
 - **[dbt/models/pgr_README.md](dbt/models/pgr_README.md)** - PGR reference implementation guide
-- **[agent/README.md](agent/README.md)** - AI Agent service documentation
+- **[agent/README.md](agent/README.md)** - AI Agent service documentation with Getting Started guide
 
-**Quick Start**: Create Silver/Gold schemas:
-```sql
-CREATE SCHEMA IF NOT EXISTS iceberg.silver;
-CREATE SCHEMA IF NOT EXISTS iceberg.gold;
+## 🎯 Example Queries
+
+Try these natural language queries in the web UI:
+
+- **"total complaints by ward"** - Complaints grouped by ward
+- **"which ward has the most complaints that are not closed"** - Top ward with open complaints
+- **"total complaints by days"** - Daily complaint trends
+- **"total complaints by month wise trend for last 2 years"** - Monthly trends over 2 years
+- **"what is the resolution rate by ward"** - Resolution rate analysis
+- **"SLA breach rate by ward for high priority complaints"** - SLA breach analysis
+
+Or use the **🎬 Run PGR Demo** button to see all queries in action!
+
+## 🏗️ Architecture
+
+- **Nessie**: Git-like Iceberg catalog (replaces Hive Metastore)
+- **MinIO**: S3-compatible object storage
+- **Trino**: Distributed SQL query engine with native S3 filesystem
+- **Iceberg**: Open table format with schema evolution and time travel
+- **dbt**: Data transformations (Bronze → Silver → Gold)
+- **MetricFlow**: Semantic layer for metrics and dimensions
+- **AI Agent**: FastAPI + Ollama LLM for natural language queries
+- **Superset**: BI dashboard tool (optional)
+
+### Technology Stack
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Object Storage | MinIO | S3-compatible storage for Iceberg data |
+| Table Format | Apache Iceberg | Open table format with schema evolution |
+| Catalog | Project Nessie | Git-like catalog for Iceberg tables |
+| Query Engine | Trino 455 | Distributed SQL query engine |
+| Transformations | dbt Core 1.11.2 | Data build tool for transformations |
+| Semantic Layer | MetricFlow 0.11.0 | Metrics and dimensions abstraction |
+| AI Agent | FastAPI + Python 3.10 | NLQ planning and execution |
+| LLM | Ollama (gpt-oss:120b-cloud) | Natural language understanding |
+| BI Tool | Apache Superset | Dashboards and visualizations |
+
+## 🔧 Configuration Files
+
+- `.env` - Environment variables (MinIO credentials, etc.)
+- `docker-compose.yml` - Service definitions (Nessie, MinIO, Trino, Superset)
+- `trino/etc/catalog/iceberg.properties` - Trino Iceberg catalog (Nessie + native S3)
+- `dbt/profiles.yml` - dbt connection to Trino
+- `dbt/dbt_project.yml` - dbt project configuration
+- `agent/requirements.txt` - Python dependencies for AI agent
+
+## 📊 Data Schemas
+
+- `iceberg.bronze` - Raw ingested tables (events, raw data)
+- `iceberg.silver` - Conformed/typed tables (validated, normalized)
+- `iceberg.gold` - Business marts (aggregated, certified)
+
+## 🧪 Testing
+
+### Run Comprehensive Test Suite
+
+```bash
+cd agent
+source ../.venv310/bin/activate
+pytest tests/test_ai_comprehensive.py -v
 ```
 
-## Architecture
+See [agent/tests/README.md](agent/tests/README.md) for detailed test documentation.
 
-- **Nessie**: Iceberg catalog (replaces Hive Metastore)
-- **MinIO**: S3-compatible object storage
-- **Trino**: SQL query engine with native S3 filesystem
-- **Iceberg**: Table format with schema evolution
-- **Superset**: BI dashboard tool
+## 🐛 Troubleshooting
 
-## Configuration Files
+### Services won't start
+```bash
+# Check service status
+docker compose ps
 
-- `.env` - Environment variables (credentials)
-- `docker-compose.yml` - Service definitions (includes Nessie, MinIO, Trino, Superset)
-- `trino/etc/catalog/iceberg.properties` - Trino Iceberg catalog (Nessie + native S3)
-- `superset/superset_config.py` - Superset feature flags
+# View logs
+docker compose logs trino
+docker compose logs nessie
+docker compose logs minio
+```
 
-## Current Schemas
+### Agent service issues
+- Ensure Ollama is running: `curl http://localhost:11434/api/tags`
+- Verify dbt project path is correct
+- Check Python environment has MetricFlow: `mf --version`
 
-- `iceberg.bronze` - Raw ingested tables
-- `iceberg.silver` - Conformed/typed tables
-- `iceberg.gold` - Star schema / marts / certified views
+### Web UI can't connect
+- Verify agent service is running: `curl http://localhost:8000/health`
+- Check browser console for CORS errors
+- Try hard refresh: `Cmd+Shift+R` (Mac) or `Ctrl+Shift+R` (Windows)
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+**Built with ❤️ using open-source technologies**
