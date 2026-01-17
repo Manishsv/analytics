@@ -134,7 +134,9 @@ source .venv310/bin/activate
 
 # Run dbt models to create Silver and Gold layers from Bronze data
 cd dbt
-dbt run
+
+# Use --profiles-dir . to use profiles.yml from current directory
+dbt run --profiles-dir .
 
 # Build semantic models for MetricFlow
 dbt parse

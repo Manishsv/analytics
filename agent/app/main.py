@@ -4,12 +4,15 @@ import re
 import logging
 from datetime import datetime
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
 from .mf import MetricFlowClient
 from .schemas import HealthResponse, CatalogResponse, QueryRequest, QueryResponse, NLQRequest, NLQResponse, PlannedQuery, QueryExplanation, MetricDefinition
 from .llm import OllamaClient
 from .guardrails import parse_catalog_text, validate_plan, compile_where
+from .cache import get_cache, cache_key_for_nlq, cache_key_for_query
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +53,25 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss:120b-cloud")
 
 llm = OllamaClient(base_url=OLLAMA_BASE_URL, model=OLLAMA_MODEL)
 ALLOWLIST = {"metrics": set(), "dimensions": set()}
+
+# Authentication (optional, disabled by default)
+API_KEY_ENABLED = os.getenv("API_KEY_ENABLED", "false").lower() == "true"
+API_KEY = os.getenv("API_KEY", "dev-api-key-change-me")
+security = HTTPBearer(auto_error=False)
+
+
+def verify_api_key(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    """Verify API key if authentication is enabled."""
+    if not API_KEY_ENABLED:
+        return True  # Auth disabled
+    
+    if not credentials:
+        raise HTTPException(status_code=401, detail="API key required. Provide 'Authorization: Bearer <key>' header.")
+    
+    if credentials.credentials != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key.")
+    
+    return True
 
 
 def parse_date_from_formatted(date_str: str) -> datetime:
@@ -248,7 +270,24 @@ def catalog():
 
 
 @app.post("/query", response_model=QueryResponse)
-def query(req: QueryRequest):
+def query(req: QueryRequest, _: bool = Depends(verify_api_key)):
+    """Direct MetricFlow query endpoint with caching."""
+    cache = get_cache()
+    cache_key = cache_key_for_query(
+        metrics=req.metrics,
+        dimensions=req.dimensions,
+        where=req.where,
+        start_time=req.start_time,
+        end_time=req.end_time,
+        limit=req.limit
+    )
+    
+    # Check cache first
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        logger.info(f"[CACHE HIT] Query for metrics={req.metrics}")
+        return QueryResponse(**cached_result)
+    
     try:
         result = mf.query(
             metrics=req.metrics,
@@ -258,11 +297,19 @@ def query(req: QueryRequest):
             end_time=req.end_time,
             limit=req.limit,
         )
-        return {
+        
+        response_data = {
             "returncode": result.returncode,
             "stdout": result.stdout,
             "stderr": result.stderr,
         }
+        
+        # Cache successful results only
+        if result.returncode == 0:
+            cache.put(cache_key, response_data, ttl=300)  # 5 min TTL
+            logger.info(f"[CACHE MISS] Query for metrics={req.metrics}, cached for 5min")
+        
+        return QueryResponse(**response_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -270,9 +317,17 @@ def query(req: QueryRequest):
 
 
 @app.post("/nlq", response_model=NLQResponse)
-async def nlq(req: NLQRequest, request: Request):
+async def nlq(req: NLQRequest, request: Request, _: bool = Depends(verify_api_key)):
     start_time = time.time()
     client_ip = request.client.host if request.client else "unknown"
+    
+    # Check cache first
+    cache = get_cache()
+    cache_key = cache_key_for_nlq(req.question, req.limit)
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        logger.info(f"[CACHE HIT] NLQ for question='{req.question[:100]}'")
+        return NLQResponse(**cached_result)
     
     logger.info(f"[NLQ] Request from {client_ip}: question='{req.question[:100]}', limit={req.limit}")
     system = f"""
@@ -408,7 +463,7 @@ Output ONLY valid JSON with this schema:
             where_clause=where,
         )
 
-        return {
+        response_data = {
             "plan": plan.model_dump(),
             "execution": {
                 "returncode": result.returncode,
@@ -418,6 +473,13 @@ Output ONLY valid JSON with this schema:
             "explanation": explanation.model_dump(),
             "is_top_query": is_top_query,
         }
+        
+        # Cache successful results only
+        if result.returncode == 0:
+            cache.put(cache_key, response_data, ttl=300)  # 5 min TTL
+            logger.info(f"[CACHE MISS] NLQ cached for 5min")
+        
+        return NLQResponse(**response_data)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

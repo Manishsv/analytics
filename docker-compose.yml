@@ -33,14 +33,39 @@ services:
       echo 'MinIO bucket warehouse ready.'"
     restart: "no"
 
+  # PostgreSQL database for Nessie catalog persistence
+  postgres:
+    image: postgres:15-alpine
+    container_name: dap-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nessie}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nessie123}
+      POSTGRES_DB: ${POSTGRES_DB:-nessie}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nessie}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   nessie:
     image: ghcr.io/projectnessie/nessie:0.103.2
     container_name: dap-nessie
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "19120:19120"
       - "1999:1999"
     environment:
-      - nessie.version.store.type=IN_MEMORY
+      - nessie.version.store.type=JDBC
+      - nessie.version.store.persist.jdbc.datasource=postgresql
+      - quarkus.datasource.postgresql.jdbc.url=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-nessie}
+      - quarkus.datasource.postgresql.username=${POSTGRES_USER:-nessie}
+      - quarkus.datasource.postgresql.password=${POSTGRES_PASSWORD:-nessie123}
     healthcheck:
       test: ["CMD", "bash", "-lc", "curl -sf http://localhost:19120/api/v2/config || exit 1"]
       interval: 5s
@@ -83,3 +108,4 @@ services:
 volumes:
   minio_data:
   superset_home:
+  postgres_data:

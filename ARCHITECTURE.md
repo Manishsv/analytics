@@ -743,10 +743,10 @@ DBT_PROFILES_DIR=./dbt
 ## Future Enhancements
 
 ### Short Term
-- [ ] PostgreSQL backend for Nessie (persistence)
-- [ ] Authentication for Trino/Agent
-- [ ] Query result caching
-- [ ] Additional semantic models (Sales, etc.)
+- [x] PostgreSQL backend for Nessie (persistence)
+- [x] Authentication for Trino/Agent (API key auth for Agent)
+- [x] Query result caching (LRU cache with 5min TTL)
+- [x] Additional semantic models (Sales, etc.)
 - [x] PGR demo mode (automated query execution)
 - [x] Dimension discovery UI
 - [x] Comprehensive test suite
