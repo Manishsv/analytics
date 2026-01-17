@@ -28,18 +28,32 @@ def parse_catalog_text(metrics_raw: str, dimensions_raw: str) -> Dict[str, Set[s
     dimensions = set()
     for line in dimensions_raw.splitlines():
         line = line.strip()
-        if not line or line.lower().startswith(("available", "name", "dimension", "looking", "found", "common", "for")):
+        if not line:
             continue
-        # Match bullet points: "• dimension_name" or "• dimension_name,"
-        if "•" in line or "•" in line:
-            parts = line.split("•")[-1].strip()
-            name = parts.split(",")[0].strip()
-            if re.match(r"^[a-zA-Z0-9_]+$", name):
+        # Skip header lines
+        if line.lower().startswith(("available", "name", "dimension", "looking", "found", "format", "list", "we've")):
+            continue
+        # Match bullet points: "• dimension_name" or "• dimension_name," 
+        # The bullet can be unicode "•" (U+2022) or similar
+        if "•" in line or "•" in line or line.startswith("•"):
+            # Extract after bullet - handle both unicode bullets
+            for bullet_char in ["•", "•"]:
+                if bullet_char in line:
+                    parts = line.split(bullet_char, 1)[-1].strip()
+                    break
+            else:
+                parts = line.lstrip("•").strip()
+            # Extract dimension name (may have double underscores like complaint__ward_id)
+            # Handle both "complaint__ward_id" and "complaint__ward_id," and "complaint__ward_id and 3 more"
+            name = parts.split(",")[0].split(" and")[0].strip()
+            # Allow underscores (including double underscores like complaint__ward_id)
+            if re.match(r"^[a-zA-Z0-9_]+$", name) and name and len(name) > 1:
                 dimensions.add(name)
-        # Also match plain dimension names
-        elif re.match(r"^[a-zA-Z0-9_]+", line):
-            name = line.split(",")[0].strip()
-            if re.match(r"^[a-zA-Z0-9_]+$", name):
+        # Also match plain dimension names starting with letter/underscore (may have underscores)
+        elif re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*", line):
+            name = line.split(",")[0].split(" and")[0].strip()
+            # Allow underscores (including double underscores for entity-prefixed dimensions)
+            if re.match(r"^[a-zA-Z0-9_]+$", name) and name and len(name) > 1:
                 dimensions.add(name)
 
     return {"metrics": metrics, "dimensions": dimensions}

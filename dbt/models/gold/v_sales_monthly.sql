@@ -5,6 +5,7 @@
 
 select
     period_yyyymm,
+    period_date,  -- DATE type for time-based operations
     geo_id,
     channel_id,
     units,

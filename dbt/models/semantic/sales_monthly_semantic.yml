@@ -9,20 +9,25 @@ semantic_models:
     model: ref('gold_sales_monthly')
 
     defaults:
-      agg_time_dimension: period_yyyymm
+      agg_time_dimension: period_date  # Use DATE type for time operations
 
     entities:
       - name: sales
         type: primary
-        expr: "concat(period_yyyymm, '|', geo_id, '|', channel_id)"
+        expr: "concat(cast(period_date as varchar), '|', geo_id, '|', channel_id)"
 
     dimensions:
-      - name: period_yyyymm
+      - name: period_date
         type: time
         type_params:
           time_granularity: month
+        expr: period_date
+        description: "Month as DATE (first day of month). Use this for time-based filtering and YoY comparisons."
+
+      - name: period_yyyymm
+        type: categorical
         expr: period_yyyymm
-        description: "Month in YYYYMM format."
+        description: "Month in YYYYMM string format (for backward compatibility and period-based filtering)."
 
       - name: geo_id
         type: categorical

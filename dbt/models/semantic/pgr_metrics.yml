@@ -1,0 +1,61 @@
+version: 2
+
+metrics:
+  - name: pgr_complaints
+    description: "Total PGR complaints submitted (case count)."
+    type: simple
+    label: "PGR Complaints"
+    type_params:
+      measure: complaints
+
+  - name: pgr_resolved_complaints
+    description: "Total PGR complaints resolved."
+    type: simple
+    label: "PGR Resolved Complaints"
+    type_params:
+      measure: resolved_complaints
+
+  - name: pgr_resolution_rate
+    description: "Resolved / Total complaints."
+    type: ratio
+    label: "PGR Resolution Rate"
+    type_params:
+      numerator: pgr_resolved_complaints
+      denominator: pgr_complaints
+
+  - name: pgr_tat_submit_to_resolve_hours_sum
+    description: "Sum of time to resolve in hours."
+    type: simple
+    label: "TAT Submit to Resolve (Sum Hours)"
+    type_params:
+      measure: pgr_tat_submit_to_resolve_hours_sum
+
+  - name: pgr_tat_submit_to_resolve_hours_count
+    description: "Count of complaints with resolved time."
+    type: simple
+    label: "TAT Submit to Resolve (Count)"
+    type_params:
+      measure: pgr_tat_submit_to_resolve_hours_count
+
+  - name: pgr_avg_tat_submit_to_resolve_hours
+    description: "Average time from submit to resolve in hours."
+    type: ratio
+    label: "Avg TAT (Submit to Resolve) Hours"
+    type_params:
+      numerator: pgr_tat_submit_to_resolve_hours_sum
+      denominator: pgr_tat_submit_to_resolve_hours_count
+
+  - name: pgr_sla_breached_complaints
+    description: "Count of complaints that breached SLA."
+    type: simple
+    label: "PGR SLA Breached Complaints"
+    type_params:
+      measure: breached_complaints
+
+  - name: pgr_sla_breach_rate
+    description: "Breached / Total complaints (breach rate)."
+    type: ratio
+    label: "PGR SLA Breach Rate"
+    type_params:
+      numerator: pgr_sla_breached_complaints
+      denominator: pgr_complaints

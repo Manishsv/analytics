@@ -69,14 +69,13 @@ SELECT * FROM iceberg.bronze.sample_sales;
 
 **Note**: Bronze/Silver/Gold schemas are pre-created. All tables use Nessie catalog and MinIO (native S3) storage.
 
-## Next Steps
+## Documentation
 
-See [NEXT_STEPS.md](NEXT_STEPS.md) for the complete roadmap including:
-- Catalog conventions (Bronze/Silver/Gold schemas)
-- dbt Core implementation for transformations
-- MetricFlow semantic layer setup
-- AI Agent service development
-- Superset integration with governed objects
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture and design
+- **[INGESTION.md](INGESTION.md)** - Data ingestion workflows and examples
+- **[NEXT_STEPS.md](NEXT_STEPS.md)** - Roadmap and future enhancements
+- **[dbt/models/pgr_README.md](dbt/models/pgr_README.md)** - PGR reference implementation guide
+- **[agent/README.md](agent/README.md)** - AI Agent service documentation
 
 **Quick Start**: Create Silver/Gold schemas:
 ```sql

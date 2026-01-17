@@ -15,3 +15,27 @@ sources:
             tests: [not_null]
           - name: channel_id
             tests: [not_null]
+      - name: service_events_raw
+        description: "Raw service events landing table (PGR and other services)"
+        columns:
+          - name: event_date
+            tests:
+              - not_null
+          - name: event_time
+            tests:
+              - not_null
+          - name: tenant_id
+            tests:
+              - not_null
+          - name: service
+            tests:
+              - not_null
+          - name: entity_type
+            tests:
+              - not_null
+          - name: entity_id
+            tests:
+              - not_null
+          - name: event_type
+            tests:
+              - not_null

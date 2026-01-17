@@ -58,6 +58,21 @@ class NLQRequest(BaseModel):
     limit: int = Field(default=200, ge=1, le=1000)
 
 
+class MetricDefinition(BaseModel):
+    name: str
+    description: Optional[str] = None
+    type: Optional[str] = None  # simple, ratio, derived, etc.
+
+
+class QueryExplanation(BaseModel):
+    metrics: List[MetricDefinition] = Field(default_factory=list)
+    dimensions: List[str] = Field(default_factory=list)
+    filters: List[StructuredFilter] = Field(default_factory=list)
+    time_range: Optional[dict] = None  # {"start": "...", "end": "..."}
+    where_clause: Optional[str] = None  # Compiled where clause for audit
+
+
 class NLQResponse(BaseModel):
     plan: PlannedQuery
     execution: QueryResponse
+    explanation: QueryExplanation

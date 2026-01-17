@@ -1,0 +1,66 @@
+version: 2
+
+semantic_models:
+  - name: pgr_case_lifecycle
+    description: "One row per PGR complaint with lifecycle timestamps and derived durations."
+    model: ref('gold_pgr_case_lifecycle')
+
+    defaults:
+      agg_time_dimension: submitted_time
+
+    entities:
+      - name: complaint
+        type: primary
+        expr: complaint_id
+
+    dimensions:
+      - name: submitted_time
+        type: time
+        expr: submitted_time
+        type_params:
+          time_granularity: day
+
+      - name: tenant_id
+        type: categorical
+        expr: tenant_id
+
+      - name: ward_id
+        type: categorical
+        expr: ward_id
+
+      - name: channel
+        type: categorical
+        expr: channel
+
+      - name: complaint_type
+        type: categorical
+        expr: complaint_type
+
+      - name: priority
+        type: categorical
+        expr: priority
+
+      - name: last_status
+        type: categorical
+        expr: last_status
+
+    measures:
+      - name: complaints
+        agg: count_distinct
+        expr: complaint_id
+
+      - name: resolved_complaints
+        agg: count_distinct
+        expr: case when resolved_time is not null then complaint_id end
+
+      - name: pgr_tat_submit_to_resolve_hours_sum
+        agg: sum
+        expr: coalesce(t_submit_to_resolve_hours, 0)
+
+      - name: pgr_tat_submit_to_resolve_hours_count
+        agg: sum
+        expr: case when t_submit_to_resolve_hours is not null then 1 else 0 end
+
+      - name: breached_complaints
+        agg: count_distinct
+        expr: case when breach_flag = true then complaint_id end

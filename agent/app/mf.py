@@ -73,27 +73,45 @@ class MetricFlowClient:
         """
         Uses `mf list metrics` and `mf list dimensions`.
         Output formats vary slightly across versions; we return raw text plus best-effort parsing.
-        Note: `mf list dimensions` requires a metric, so we use the first available metric.
+        Note: `mf list dimensions` requires a metric, so we query dimensions for all metrics and combine.
         """
         metrics = self._run(["list", "metrics"], timeout_s=30)
 
         if metrics.returncode != 0:
             raise RuntimeError(f"mf list metrics failed: {metrics.stderr.strip()}")
 
-        # Extract first metric name for dimensions listing
+        # Extract all metric names for dimensions listing
         # Format: "• metric_name: ..." or similar
-        first_metric = None
+        metric_names = []
         for line in metrics.stdout.split('\n'):
-            if '•' in line and ':' in line:
-                first_metric = line.split('•')[1].split(':')[0].strip()
-                break
+            if '•' in line:
+                # Handle both "• metric_name: ..." and "• metric_name"
+                parts = line.split('•')[1].strip()
+                metric_name = parts.split(':')[0].split()[0].strip()
+                if metric_name and metric_name not in metric_names:
+                    metric_names.append(metric_name)
 
-        dims_output = ""
-        if first_metric:
-            dims = self._run(["list", "dimensions", "--metrics", first_metric], timeout_s=30)
-            if dims.returncode == 0:
-                dims_output = dims.stdout
-            # If dimensions listing fails, we still return metrics
+        # Query dimensions for all metrics (or at least a sample including PGR)
+        # Prioritize metrics that likely have different dimension sets
+        dims_output_parts = []
+        metrics_to_query = []
+        
+        # If we have PGR metrics, prioritize them; otherwise use first few metrics
+        pgr_metrics = [m for m in metric_names if m.startswith('pgr_')]
+        if pgr_metrics:
+            metrics_to_query.extend(pgr_metrics[:2])  # Get PGR dimensions
+        if metric_names:
+            metrics_to_query.append(metric_names[0])  # Get sales dimensions
+        
+        # Query dimensions for each metric and combine
+        all_dims_seen = set()
+        for metric in metrics_to_query:
+            dims = self._run(["list", "dimensions", "--metrics", metric], timeout_s=30)
+            if dims.returncode == 0 and dims.stdout:
+                # Combine output, avoiding duplicates
+                dims_output_parts.append(f"# Dimensions for {metric}:\n{dims.stdout}")
+        
+        dims_output = "\n\n".join(dims_output_parts) if dims_output_parts else ""
 
         return {
             "metrics_raw": metrics.stdout,

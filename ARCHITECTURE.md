@@ -1,0 +1,706 @@
+# Data Analytics Platform - Architecture Document
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [System Architecture](#system-architecture)
+3. [Technology Stack](#technology-stack)
+4. [Data Architecture](#data-architecture)
+5. [Component Details](#component-details)
+6. [Data Flow](#data-flow)
+7. [Storage & Catalog](#storage--catalog)
+8. [Security & Governance](#security--governance)
+9. [Deployment](#deployment)
+10. [Scalability & Performance](#scalability--performance)
+
+---
+
+## Overview
+
+The Data Analytics Platform is a modern, cloud-native analytics stack built on open-source technologies, designed to support multi-tenant event analytics with natural language querying capabilities.
+
+### Key Capabilities
+
+- **Event Ingestion**: Support for streaming and batch event data (PGR, Sales, etc.)
+- **Data Lakehouse Architecture**: Bronze/Silver/Gold layered data processing
+- **Semantic Layer**: MetricFlow-powered metrics and dimensions
+- **Natural Language Queries**: AI-powered NLQ agent for business users
+- **BI Integration**: Superset for dashboards and visualizations
+- **Scalable Storage**: Iceberg tables on S3-compatible storage
+
+### Design Principles
+
+- **Open Source**: Built on open-source technologies
+- **Schema Evolution**: Iceberg tables support schema changes
+- **Time Travel**: Iceberg enables point-in-time queries
+- **Semantic Consistency**: MetricFlow ensures metric definitions are consistent
+- **Guardrails**: AI agent enforces security and performance limits
+
+---
+
+## System Architecture
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Data Sources                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │   PGR API    │  │  Sales DB    │  │   Events     │              │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
+└─────────┼──────────────────┼──────────────────┼──────────────────────┘
+          │                  │                  │
+          ▼                  ▼                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Ingestion Layer                                   │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  File Upload / API / Batch Insert → MinIO (S3)              │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Storage Layer (MinIO)                             │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │         s3://warehouse/                                      │   │
+│  │         ├── bronze/    (Raw events)                          │   │
+│  │         ├── silver/    (Conformed data)                      │   │
+│  │         └── gold/      (Business marts)                      │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              Catalog Layer (Nessie)                                  │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  Git-like catalog with branches, commits, time travel        │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              Processing Layer                                        │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐ │
+│  │   Trino (SQL)    │  │   dbt (ETL)      │  │  MetricFlow      │ │
+│  │   Query Engine   │  │   Transformations│  │  Semantic Layer  │ │
+│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘ │
+└───────────┼──────────────────────┼──────────────────────┼───────────┘
+            │                      │                      │
+            └──────────────────────┼──────────────────────┘
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              Access Layer                                            │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐ │
+│  │  AI Agent (NLQ)  │  │   Superset (BI)  │  │  Web Chat UI     │ │
+│  │  FastAPI + LLM   │  │   Dashboards     │  │  Natural Lang    │ │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Component Interaction Flow
+
+```
+User Query (NLQ)
+    │
+    ▼
+┌─────────────────┐
+│  Web UI / API   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  AI Agent       │──► Ollama (LLM) ──► Plan (metrics, dimensions, filters)
+│  (FastAPI)      │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  MetricFlow     │──► Translate plan to SQL
+│  (Semantic)     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Trino          │──► Execute SQL against Iceberg tables
+│  (Query Engine) │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Nessie Catalog │──► Resolve table metadata
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  MinIO (S3)     │──► Read Parquet data
+└─────────────────┘
+```
+
+---
+
+## Technology Stack
+
+### Core Infrastructure
+
+| Component | Technology | Version | Purpose |
+|-----------|-----------|---------|---------|
+| **Object Storage** | MinIO | Latest | S3-compatible storage for Iceberg data |
+| **Table Format** | Apache Iceberg | Latest | Open table format with schema evolution |
+| **Catalog** | Project Nessie | 0.103.2 | Git-like catalog for Iceberg tables |
+| **Query Engine** | Trino | 455 | Distributed SQL query engine |
+| **Transformations** | dbt Core | 1.11.2 | Data build tool for transformations |
+| **Semantic Layer** | MetricFlow | 0.11.0 | Metrics and dimensions abstraction |
+
+### Application Layer
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **AI Agent** | FastAPI + Python 3.10 | NLQ planning and execution |
+| **LLM** | Ollama (gpt-oss:120b-cloud) | Natural language understanding |
+| **Web UI** | HTML + JavaScript | Chat interface for queries |
+| **BI Tool** | Apache Superset | Dashboards and visualizations |
+
+### Data Formats
+
+- **Storage**: Parquet (columnar, compressed)
+- **Serialization**: JSON (events, attributes)
+- **Partitioning**: Date-based, service-based
+
+---
+
+## Data Architecture
+
+### Bronze/Silver/Gold Pattern
+
+#### Bronze Layer (Raw Landing)
+
+**Purpose**: Store raw, unprocessed events as received from source systems.
+
+**Characteristics**:
+- Minimal transformation (type casting only)
+- Partitioned by `event_date` and `service`
+- Retains all original fields + `raw_payload`
+- Append-only (immutable)
+
+**Example Tables**:
+- `iceberg.bronze.service_events_raw` - All service events (PGR, etc.)
+- `iceberg.bronze.sample_sales` - Sales transactions
+
+**Schema Pattern**:
+```sql
+CREATE TABLE iceberg.bronze.service_events_raw (
+    event_date DATE,
+    event_time TIMESTAMP,
+    tenant_id VARCHAR,
+    service VARCHAR,
+    entity_type VARCHAR,
+    entity_id VARCHAR,
+    event_type VARCHAR,
+    status VARCHAR,
+    actor_type VARCHAR,
+    actor_id VARCHAR,
+    channel VARCHAR,
+    ward_id VARCHAR,
+    locality_id VARCHAR,
+    attributes_json VARCHAR,  -- Flexible JSON for varying attributes
+    raw_payload VARCHAR        -- Full original payload
+)
+WITH (
+    format = 'PARQUET',
+    partitioning = ARRAY['event_date', 'service']
+);
+```
+
+#### Silver Layer (Conformed)
+
+**Purpose**: Typed, validated, and normalized data ready for analytics.
+
+**Characteristics**:
+- Data quality checks (not-null, valid values)
+- Type conversions and standardization
+- Extracted attributes from JSON
+- Filtered invalid records
+
+**Example Models**:
+- `silver_pgr_events` - Typed PGR events with extracted attributes
+- `silver_sales` - Typed sales transactions
+
+**Transformation Example**:
+```sql
+-- Extract from attributes_json
+json_extract_scalar(attributes_json, '$.complaint_type') as complaint_type,
+json_extract_scalar(attributes_json, '$.priority') as priority,
+try_cast(json_extract_scalar(attributes_json, '$.sla_hours') as integer) as sla_hours
+```
+
+#### Gold Layer (Business Marts)
+
+**Purpose**: Business-ready aggregates, facts, and dimensions for analytics.
+
+**Characteristics**:
+- Aggregated at business grain (e.g., case-level, daily)
+- Denormalized for query performance
+- Certified metrics and KPIs
+- Optimized for common query patterns
+
+**Example Models**:
+- `gold_pgr_case_lifecycle` - One row per complaint with lifecycle metrics
+- `gold_pgr_funnel_daily` - Daily funnel metrics
+- `gold_pgr_backlog_daily` - Daily backlog snapshots
+- `gold_sales_monthly` - Monthly sales aggregates
+
+**Design Pattern**:
+- Case-level facts (for TAT, SLA metrics)
+- Event-level daily aggregates (for throughput trends)
+- Snapshot tables (for point-in-time analysis)
+
+---
+
+## Component Details
+
+### 1. MinIO (Object Storage)
+
+**Role**: S3-compatible object storage for Iceberg table data.
+
+**Configuration**:
+- Bucket: `warehouse`
+- Access: MinIO Console (port 9001) or S3 API (port 9000)
+- Credentials: Configured via `.env`
+
+**Storage Layout**:
+```
+s3://warehouse/
+├── bronze/
+│   ├── service_events_raw/
+│   │   ├── event_date=2024-10-01/
+│   │   │   └── service=PGR/
+│   │   │       └── data.parquet
+│   └── sample_sales/
+├── silver/
+│   └── silver_pgr_events/
+└── gold/
+    ├── gold_pgr_case_lifecycle/
+    └── gold_sales_monthly/
+```
+
+### 2. Nessie (Catalog)
+
+**Role**: Git-like catalog for Iceberg table metadata.
+
+**Features**:
+- Branching and versioning
+- Time travel queries
+- Schema evolution tracking
+- In-memory for dev (can use PostgreSQL/JDBC for production)
+
+**API**: REST API on port 19120
+
+### 3. Trino (Query Engine)
+
+**Role**: Distributed SQL engine for querying Iceberg tables.
+
+**Configuration**:
+- Port: 8090 (mapped from container port 8080)
+- Catalog: `iceberg`
+- Native S3 filesystem enabled (no Hadoop dependencies)
+- Iceberg connector configured for Nessie catalog
+
+**Key Capabilities**:
+- SQL queries across Bronze/Silver/Gold
+- Parquet file reading
+- Partition pruning
+- Query federation (future)
+
+### 4. dbt (Transformations)
+
+**Role**: Data transformation pipeline (Bronze → Silver → Gold).
+
+**Structure**:
+```
+dbt/
+├── models/
+│   ├── bronze/
+│   │   └── sources.yml      # Source table definitions
+│   ├── silver/
+│   │   ├── silver_sales.sql
+│   │   └── pgr/
+│   │       └── silver_pgr_events.sql
+│   ├── gold/
+│   │   ├── gold_sales_monthly.sql
+│   │   └── pgr/
+│   │       ├── gold_pgr_case_lifecycle.sql
+│   │       ├── gold_pgr_funnel_daily.sql
+│   │       └── gold_pgr_backlog_daily.sql
+│   └── semantic/
+│       ├── sales_monthly_semantic.yml
+│       ├── pgr_case_lifecycle_semantic.yml
+│       ├── metrics.yml
+│       └── pgr_metrics.yml
+└── dbt_project.yml
+```
+
+**Materialization Strategies**:
+- Bronze sources: `view` (read-only references)
+- Silver: `table` (typed, validated data)
+- Gold: `table` (aggregated marts)
+- Views: Not supported (Iceberg Nessie limitation)
+
+### 5. MetricFlow (Semantic Layer)
+
+**Role**: Abstract metrics and dimensions from underlying tables.
+
+**Components**:
+- **Semantic Models**: Map Gold tables to entities, dimensions, measures
+- **Metrics**: Business metrics (counts, ratios, derived)
+- **Time Spine**: Date dimension for time-based calculations
+
+**Example Semantic Model**:
+```yaml
+semantic_models:
+  - name: pgr_case_lifecycle
+    model: ref('gold_pgr_case_lifecycle')
+    entities:
+      - name: complaint
+        expr: complaint_id
+    dimensions:
+      - name: submitted_time
+        type: time
+      - name: ward_id
+        type: categorical
+    measures:
+      - name: complaints
+        agg: count_distinct
+        expr: complaint_id
+```
+
+**Query Interface**:
+```bash
+mf query --metrics pgr_complaints --group-by complaint__ward_id
+```
+
+### 6. AI Agent Service (FastAPI)
+
+**Role**: Natural language query planning and execution.
+
+**Components**:
+- **LLM Client** (Ollama): Converts NL → structured query plan
+- **MetricFlow Client**: Executes planned queries
+- **Guardrails**: Validates plans against allowlists
+- **Rate Limiting**: Prevents abuse (60/min, 1000/hour)
+
+**Flow**:
+1. Receive NL query from user
+2. LLM generates plan (metrics, dimensions, filters)
+3. Validate plan against MetricFlow catalog
+4. Compile safe WHERE clauses from filters
+5. Execute via MetricFlow
+6. Return results + explanation
+
+**API Endpoints**:
+- `GET /health` - Health check
+- `GET /catalog` - List available metrics/dimensions
+- `POST /query` - Direct MetricFlow query
+- `POST /nlq` - Natural language query
+
+### 7. Web UI
+
+**Role**: User-friendly interface for NLQ queries.
+
+**Features**:
+- Chat-like interface
+- Query plan display
+- Formatted table results
+- User-friendly error messages
+- Example queries
+
+**Technology**: Single-page HTML + JavaScript
+
+---
+
+## Data Flow
+
+### Event Ingestion Flow
+
+```
+1. Source System
+   │
+   ├─► File Upload ──► MinIO staging/
+   │                        │
+   │                        ├─► Batch INSERT ──► iceberg.bronze.*
+   │                        │
+   └─► API/Stream ──────────┘   (via Trino)
+```
+
+### Transformation Flow
+
+```
+Bronze (Raw)
+    │
+    ├─► dbt run silver_* ──► Silver (Typed)
+    │                              │
+    │                              ├─► dbt run gold_* ──► Gold (Marts)
+    │                              │
+    └─► MetricFlow Semantic Model ─┘
+```
+
+### Query Flow
+
+```
+User Query
+    │
+    ├─► Web UI ──► AI Agent ──► LLM (Plan)
+    │                              │
+    │                              ▼
+    │                         MetricFlow
+    │                              │
+    └─► Superset ──────────────────┘
+                              │
+                              ▼
+                         Trino
+                              │
+                              ▼
+                    Nessie (Catalog)
+                              │
+                              ▼
+                    MinIO (Parquet)
+                              │
+                              ▼
+                         Results
+```
+
+---
+
+## Storage & Catalog
+
+### Iceberg Table Format
+
+**Benefits**:
+- **Schema Evolution**: Add/remove columns without rewriting data
+- **Time Travel**: Query data at any point in time
+- **Partition Evolution**: Change partitioning without full rewrite
+- **ACID Transactions**: Consistent reads and writes
+- **Metadata Management**: Efficient metadata with file-level statistics
+
+**File Organization**:
+- **All layers (Bronze/Silver/Gold) store data as Parquet files**
+- Data files: Parquet format (compressed, columnar)
+- Metadata files: JSON (manifests, snapshots)
+- Stored in: `s3://warehouse/<schema>/<table>/`
+
+**Storage Format**:
+```sql
+-- All Iceberg tables use PARQUET format
+WITH (
+    format = 'PARQUET',
+    compression_codec = 'ZSTD'  -- Optional, defaults to ZSTD
+)
+```
+
+**Why Parquet for All Layers?**:
+- **Bronze**: Efficient storage of raw events, column pruning for selective reads
+- **Silver**: Columnar format enables fast analytical queries during transformation
+- **Gold**: Optimized for query performance, supports predicate pushdown
+
+### Nessie Catalog
+
+**Git-like Features**:
+- Branches: `main`, `dev`, `feature/*`
+- Commits: Track metadata changes
+- Time Travel: Query tables at specific commits
+- Merging: Merge branches (future)
+
+**Catalog References**:
+- Tables referenced by: `catalog.schema.table`
+- Default branch: `main`
+- Metadata stored: Table location, schema, partitions
+
+### Partitioning Strategy
+
+**Bronze Tables**:
+- Partition by: `event_date`, `service`
+- Rationale: Time-based queries, service isolation
+
+**Silver Tables**:
+- Typically no partitioning (smaller volume)
+- Or partition by: `period_yyyymm` for time-series
+
+**Gold Tables**:
+- Partition by business grain (if needed)
+- Example: `gold_pgr_backlog_daily` partitioned by `metric_date`
+
+---
+
+## Security & Governance
+
+### Access Control
+
+**Current State (Dev)**:
+- MinIO: Single admin credentials
+- Trino: No authentication (development mode)
+- Nessie: In-memory (no persistence)
+
+**Production Considerations**:
+- MinIO: IAM policies, bucket policies
+- Trino: LDAP/OAuth2 authentication
+- Nessie: Database-backed with access control
+- Agent API: API keys, OAuth2 tokens
+
+### Data Governance
+
+**Guardrails in AI Agent**:
+- Allowlist validation (metrics/dimensions)
+- Query timeouts (60 seconds)
+- Row limits (1-1000)
+- Rate limiting (60/min, 1000/hour per IP)
+
+**Audit Trail**:
+- Query explanations (metrics, dimensions, filters used)
+- Structured logging (request → plan → execution → timing)
+- Nessie catalog commits (metadata changes)
+
+### Data Quality
+
+**dbt Tests**:
+- Not-null constraints on critical fields
+- Uniqueness checks on primary keys
+- Referential integrity between layers
+- Accepted values for enumerations
+
+---
+
+## Deployment
+
+### Docker Compose Stack
+
+**Services**:
+```yaml
+- minio: S3-compatible storage
+- minio-init: Bucket initialization
+- nessie: Catalog service
+- trino: Query engine
+- superset: BI tool (optional)
+```
+
+**Ports**:
+- MinIO Console: 9001
+- MinIO API: 9000
+- Nessie: 19120
+- Trino: 8090
+- Superset: 8088
+
+### Agent Service
+
+**Local Development**:
+```bash
+source .venv310/bin/activate
+uvicorn agent.app.main:app --reload --port 8000
+```
+
+**Production Options**:
+- Docker container (see `agent/Dockerfile`)
+- Kubernetes deployment
+- Cloud-managed (AWS ECS, GCP Cloud Run)
+
+### Environment Variables
+
+```bash
+# MinIO
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin123
+
+# Agent
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=gpt-oss:120b-cloud
+DBT_PROJECT_DIR=./dbt
+DBT_PROFILES_DIR=./dbt
+```
+
+---
+
+## Scalability & Performance
+
+### Horizontal Scaling
+
+**Trino**:
+- Add worker nodes for parallel query execution
+- Coordinator + workers architecture
+- Query distribution across workers
+
+**MinIO**:
+- Multi-node distributed MinIO cluster
+- Erasure coding for redundancy
+- Load balancing across nodes
+
+**Agent Service**:
+- Stateless FastAPI instances
+- Load balancer (nginx, AWS ALB)
+- Horizontal pod autoscaling (K8s)
+
+### Performance Optimizations
+
+**Storage**:
+- Parquet columnar format (column pruning)
+- Partition pruning (date/service filters)
+- Compression (ZSTD codec)
+- File-level statistics (min/max values)
+
+**Query**:
+- Materialized views (future)
+- Query result caching (future)
+- Predicate pushdown (Iceberg)
+- Vectorized reads (Parquet)
+
+**Catalog**:
+- Metadata caching
+- Batch metadata reads
+- Lazy catalog loading
+
+### Capacity Planning
+
+**Current Dev Capacity**:
+- Storage: Limited by Docker volume size
+- Memory: 2-4GB per container
+- CPU: Shared host resources
+
+**Production Estimates** (per 1M events/day):
+- Storage: ~10-50GB/year (compressed Parquet)
+- Trino: 4-8 workers, 16GB RAM each
+- MinIO: 3-5 nodes for HA
+- Agent: 2-4 instances for redundancy
+
+---
+
+## Future Enhancements
+
+### Short Term
+- [ ] PostgreSQL backend for Nessie (persistence)
+- [ ] Authentication for Trino/Agent
+- [ ] Query result caching
+- [ ] Additional semantic models (Sales, etc.)
+
+### Medium Term
+- [ ] Real-time ingestion (Kafka/Event Streams)
+- [ ] Materialized views for common queries
+- [ ] Multi-tenant data isolation
+- [ ] Advanced dbt tests (custom tests)
+
+### Long Term
+- [ ] Multi-region deployment
+- [ ] Query federation across catalogs
+- [ ] ML model integration (anomaly detection)
+- [ ] Self-service data onboarding
+
+---
+
+## References
+
+- [Iceberg Specification](https://iceberg.apache.org/spec/)
+- [Nessie Documentation](https://projectnessie.org/)
+- [Trino Documentation](https://trino.io/docs/)
+- [dbt Documentation](https://docs.getdbt.com/)
+- [MetricFlow Documentation](https://docs.transform.co/docs/metricflow)
+
+---
+
+**Last Updated**: January 2025  
+**Version**: 1.0
