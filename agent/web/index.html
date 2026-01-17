@@ -307,9 +307,14 @@
                     Ask questions about your data metrics
                 </div>
             </div>
-            <div class="status">
-                <div class="status-dot"></div>
-                <span>Connected</span>
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <button id="demoButton" onclick="startPGRDemo()" style="padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 8px; cursor: pointer; font-size: 12px; color: white; font-weight: 600; transition: all 0.2s; box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);">
+                    🎬 Run PGR Demo
+                </button>
+                <div class="status">
+                    <div class="status-dot"></div>
+                    <span id="statusText">Connected</span>
+                </div>
             </div>
         </div>
 
@@ -331,6 +336,23 @@
             </div>
         </div>
 
+        <!-- Demo Progress Indicator -->
+        <div id="demoProgress" style="display: none; padding: 12px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; margin: 16px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 14px;">🎬 PGR Demo Running</div>
+                        <div style="font-size: 12px; opacity: 0.9;" id="demoStatus">Preparing...</div>
+                    </div>
+                </div>
+                <button onclick="stopPGRDemo()" style="padding: 6px 12px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; color: white; cursor: pointer; font-size: 12px;">Stop Demo</button>
+            </div>
+            <div style="margin-top: 8px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; overflow: hidden;">
+                <div id="demoProgressBar" style="height: 100%; background: white; width: 0%; transition: width 0.3s ease;"></div>
+            </div>
+        </div>
+
         <div class="input-container">
             <input 
                 type="text" 
@@ -347,6 +369,53 @@
         const API_BASE_URL = 'http://localhost:8000';
         let availableMetrics = [];
         let availableDimensions = [];
+        
+        // PGR Demo queries
+        const PGR_DEMO_QUERIES = [
+            {
+                question: "total complaints",
+                description: "Total PGR complaints"
+            },
+            {
+                question: "total complaints by ward",
+                description: "Complaints grouped by ward"
+            },
+            {
+                question: "complaints for WARD_003",
+                description: "Complaints for specific ward"
+            },
+            {
+                question: "which ward has the most complaints that are not closed",
+                description: "Top ward with open complaints"
+            },
+            {
+                question: "total complaints by days",
+                description: "Daily complaint trends"
+            },
+            {
+                question: "total complaints by month wise trend for last 2 years",
+                description: "Monthly trends over 2 years"
+            },
+            {
+                question: "what is the resolution rate by ward",
+                description: "Resolution rate analysis"
+            },
+            {
+                question: "SLA breach rate by ward for high priority complaints",
+                description: "SLA breach analysis"
+            },
+            {
+                question: "average time to resolve by channel",
+                description: "Average resolution time"
+            },
+            {
+                question: "complaints by ward and channel",
+                description: "Multi-dimensional analysis"
+            }
+        ];
+        
+        let demoRunning = false;
+        let demoCurrentIndex = 0;
 
         // Load catalog on page load
         window.addEventListener('DOMContentLoaded', async () => {
@@ -457,7 +526,8 @@
                             addMessage('assistant', `❌ Query Error: ${cleanError}`, false, true);
                         } else if (data.execution.stdout.trim().length > 0) {
                             // Has valid results
-                            const formattedOutput = formatQueryResults(data.execution.stdout);
+                            const isTopQuery = data.is_top_query || false;
+                            const formattedOutput = formatQueryResults(data.execution.stdout, isTopQuery);
                             content += `<div class="query-results">${formattedOutput}</div>`;
                             addMessage('assistant', content);
                         } else {
@@ -479,6 +549,12 @@
                         if (stdoutLower.includes('error') || stdoutLower.includes('exception') || stdoutLower.includes('failed')) {
                             errorMsg = formatErrorMessage(data.execution.stdout);
                         }
+                    }
+                    
+                    // Re-enable input after error (unless demo is running)
+                    if (!demoRunning) {
+                        input.disabled = false;
+                        document.getElementById('sendButton').disabled = false;
                     }
                     
                     // Fall back to stderr only if stdout doesn't have an error
@@ -521,10 +597,12 @@
                 // Display error
                 addMessage('assistant', `❌ Error: ${escapeHtml(error.message)}`, false, true);
             } finally {
-                // Re-enable input
-                input.disabled = false;
-                document.getElementById('sendButton').disabled = false;
-                input.focus();
+                // Re-enable input (unless demo is running)
+                if (!demoRunning) {
+                    input.disabled = false;
+                    document.getElementById('sendButton').disabled = false;
+                    input.focus();
+                }
 
                 // Scroll to bottom
                 const chatContainer = document.getElementById('chatContainer');
@@ -586,11 +664,13 @@
             return div.innerHTML;
         }
 
-        function formatQueryResults(stdout) {
+        function formatQueryResults(stdout, isTopQuery = false) {
             // Filter out progress messages and spinner animations
+            // NOTE: Do NOT filter separator lines (dashes) - they're needed for table detection
             const lines = stdout.split('\n').filter(line => {
                 const trimmed = line.trim();
-                // Remove empty lines, spinner lines, progress messages, and separator lines
+                // Remove empty lines, spinner lines, and progress messages
+                // Keep separator lines (dashes/equals) for table detection
                 return trimmed.length > 0 && 
                        !trimmed.includes('Initiating') && 
                        !trimmed.includes('Success') &&
@@ -598,31 +678,60 @@
                        !trimmed.includes('⠙') &&
                        !trimmed.includes('⠹') &&
                        !trimmed.includes('⠸') &&
-                       !trimmed.includes('✔') &&
-                       !trimmed.match(/^[─=]+$/); // Separator lines with only dashes/equals
+                       !trimmed.includes('✔');
             });
 
             if (lines.length === 0) {
                 return '<div style="color: #64748b;">No results returned.</div>';
             }
 
-            // Try to detect if it's a table format (has header and data rows)
-            const headerIndex = lines.findIndex(line => line.match(/^[a-zA-Z_][a-zA-Z0-9_\s]+\|/));
             let headers = [];
             let dataRows = [];
+            let tableStartIndex = -1;
 
-            if (lines.length >= 2) {
-                // Try to parse as table
-                const firstLine = lines[0].trim();
-                const secondLine = lines[1].trim();
+            // Find the start of the table (first line after progress messages, before separator)
+            for (let i = 0; i < lines.length; i++) {
+                const trimmedLine = lines[i].trim();
+                if (trimmedLine.length > 0 && !trimmedLine.match(/^[-=\s]+$/)) {
+                    tableStartIndex = i;
+                    break;
+                }
+            }
+
+            if (tableStartIndex !== -1 && lines.length >= tableStartIndex + 2) {
+                const firstLine = lines[tableStartIndex].trim();
+                const secondLine = lines[tableStartIndex + 1].trim();
                 
-                // Check if second line is a separator (dashes/equals)
-                if (secondLine.match(/^[-=]+$/)) {
+                // Check if second line is a separator (dashes/equals with optional spaces)
+                // Pattern: mostly dashes/equals, possibly with spaces between columns
+                if (secondLine.match(/^[-=\s]+$/) && secondLine.length > 10) {
                     // It's a table format
-                    headers = firstLine.split(/\s{2,}/).map(h => h.trim()).filter(h => h.length > 0);
-                    dataRows = lines.slice(2).map(line => {
-                        return line.split(/\s{2,}/).map(c => c.trim()).filter(c => c.length > 0);
-                    }).filter(row => row.length === headers.length && row.some(cell => cell.length > 0));
+                    // Split by tabs or multiple spaces
+                    headers = firstLine.split(/\t|\s{2,}/).map(h => h.trim()).filter(h => h.length > 0);
+                    dataRows = lines.slice(tableStartIndex + 2).map(line => {
+                        // Split by tabs or multiple spaces
+                        const row = line.split(/\t|\s{2,}/).map(c => c.trim()).filter(c => c.length > 0);
+                        
+                        // If row has fewer columns than headers, MetricFlow may have omitted filtered dimensions
+                        // Try to align intelligently: first column usually time, last column usually metric
+                        if (row.length < headers.length) {
+                            const diff = headers.length - row.length;
+                            // If header has time dimension first and metric last, and row has 2 values,
+                            // insert empty strings in the middle (for filtered dimensions)
+                            if (row.length >= 2 && headers.length >= 3) {
+                                // Insert empty string after first column (for filtered dimensions)
+                                const aligned = [row[0], ...Array(diff).fill(''), ...row.slice(1)];
+                                return aligned.slice(0, headers.length);
+                            } else {
+                                // Default: pad at start (values align to end)
+                                while (row.length < headers.length) {
+                                    row.unshift('');
+                                }
+                            }
+                        }
+                        // Truncate if row has more columns than headers (shouldn't happen, but handle gracefully)
+                        return row.slice(0, headers.length);
+                    }).filter(row => row.some(cell => cell.length > 0));
                 } else {
                     // Not a table, treat all as data
                     dataRows = lines.map(line => [line.trim()]);
@@ -631,6 +740,68 @@
 
             // If we have a proper table, format it as HTML table
             if (headers.length > 0 && dataRows.length > 0) {
+                // Client-side aggregation for "which X has the most Y" queries
+                if (isTopQuery && dataRows.length > 1) {
+                    // Find the metric column (usually the last column, or contains "complaint", "sales", "metric", "value", "count")
+                    let metricColIdx = -1;
+                    for (let i = headers.length - 1; i >= 0; i--) {
+                        const headerLower = headers[i].toLowerCase();
+                        if (headerLower.includes('complaint') || headerLower.includes('sales') || 
+                            headerLower.includes('metric') || headerLower.includes('value') || 
+                            headerLower.includes('count') || headerLower.includes('rate') ||
+                            headerLower.includes('pgr_') || headerLower.includes('sales_')) {
+                            metricColIdx = i;
+                            break;
+                        }
+                    }
+                    // If not found, assume last column is metric
+                    if (metricColIdx === -1 && headers.length > 0) {
+                        metricColIdx = headers.length - 1;
+                    }
+                    
+                    // Find the grouping column (first dimension column, usually the first column)
+                    const groupingColIdx = 0; // Assume the first column is the grouping dimension (e.g., ward_id)
+                    
+                    if (metricColIdx !== -1) {
+                        // Aggregate by grouping dimension
+                        const aggregatedResults = {};
+                        
+                        dataRows.forEach(row => {
+                            // Ensure groupKey is a string for dictionary keys
+                            const groupKey = String(row[groupingColIdx] || '');
+                            const metricValue = parseFloat((row[metricColIdx] || '0').toString().replace(/,/g, '')) || 0;
+                            
+                            if (groupKey && !aggregatedResults[groupKey]) {
+                                aggregatedResults[groupKey] = {
+                                    groupKey: groupKey,
+                                    metricSum: 0,
+                                    originalRow: row // Keep original row for other dimensions if needed
+                                };
+                            }
+                            if (groupKey) {
+                                aggregatedResults[groupKey].metricSum += metricValue;
+                            }
+                        });
+                        
+                        // Convert aggregated results back to dataRows format, keeping only the grouping dimension and the summed metric
+                        dataRows = Object.values(aggregatedResults).map(agg => {
+                            const newRow = Array(headers.length).fill('');
+                            newRow[groupingColIdx] = agg.groupKey;
+                            newRow[metricColIdx] = agg.metricSum;
+                            return newRow;
+                        });
+                        
+                        // Sort aggregated results by metric sum descending
+                        dataRows.sort((rowA, rowB) => {
+                            const valA = parseFloat((rowA[metricColIdx] || '0').toString().replace(/,/g, '')) || 0;
+                            const valB = parseFloat((rowB[metricColIdx] || '0').toString().replace(/,/g, '')) || 0;
+                            return valB - valA; // Descending order (highest first)
+                        });
+                        
+                        // Keep only the top 1 result
+                        dataRows = dataRows.slice(0, 1);
+                    }
+                }
                 let html = '<table style="width: 100%; border-collapse: collapse; margin-top: 8px;">';
                 
                 // Header row
@@ -676,10 +847,16 @@
         }
 
         function formatCellValue(value) {
+            // Convert to string first to handle numbers and null/undefined
+            if (value === null || value === undefined) {
+                return '';
+            }
+            const valueStr = String(value);
+            
             // Format scientific notation
             const scientificNotationRegex = /(\d+\.?\d*[eE][+-]?\d+)/;
-            if (scientificNotationRegex.test(value)) {
-                const num = parseFloat(value);
+            if (scientificNotationRegex.test(valueStr)) {
+                const num = parseFloat(valueStr);
                 if (!isNaN(num)) {
                     if (Math.abs(num) >= 1000) {
                         return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -691,13 +868,13 @@
                 }
             }
             // Try to format regular numbers with commas
-            const num = parseFloat(value);
-            if (!isNaN(num) && isFinite(num) && value.trim() !== '' && !isNaN(value)) {
-                if (Math.abs(num) >= 1000 && !value.includes('.')) {
+            const num = parseFloat(valueStr);
+            if (!isNaN(num) && isFinite(num) && valueStr.trim() !== '' && !isNaN(valueStr)) {
+                if (Math.abs(num) >= 1000 && !valueStr.includes('.')) {
                     return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                 }
             }
-            return value;
+            return valueStr;
         }
 
         function isNumeric(str) {
@@ -850,6 +1027,100 @@
             
             // No matching error pattern found
             return null;
+        }
+
+        // PGR Demo Functions
+        async function startPGRDemo() {
+            if (demoRunning) {
+                return;
+            }
+            
+            demoRunning = true;
+            demoCurrentIndex = 0;
+            
+            // Clear chat
+            const chatContainer = document.getElementById('chatContainer');
+            const welcomeMsg = chatContainer.querySelector('.welcome-message');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+            
+            // Show demo progress
+            const demoProgress = document.getElementById('demoProgress');
+            const demoStatus = document.getElementById('demoStatus');
+            const demoProgressBar = document.getElementById('demoProgressBar');
+            const statusText = document.getElementById('statusText');
+            const demoButton = document.getElementById('demoButton');
+            
+            demoProgress.style.display = 'block';
+            demoButton.disabled = true;
+            demoButton.textContent = '🎬 Demo Running...';
+            statusText.textContent = 'Demo Mode';
+            
+            // Add welcome message for demo
+            addMessage('assistant', '🎬 <strong>PGR Demo Started!</strong><br>Running ' + PGR_DEMO_QUERIES.length + ' queries to showcase the platform capabilities...', false, false);
+            
+            // Run queries sequentially
+            for (let i = 0; i < PGR_DEMO_QUERIES.length; i++) {
+                if (!demoRunning) {
+                    break;
+                }
+                
+                demoCurrentIndex = i;
+                const query = PGR_DEMO_QUERIES[i];
+                
+                // Update progress
+                const progress = ((i + 1) / PGR_DEMO_QUERIES.length) * 100;
+                demoProgressBar.style.width = progress + '%';
+                demoStatus.textContent = `Query ${i + 1}/${PGR_DEMO_QUERIES.length}: ${query.description}`;
+                
+                // Execute query
+                document.getElementById('messageInput').value = query.question;
+                await sendMessage();
+                
+                // Wait before next query (except for the last one)
+                if (i < PGR_DEMO_QUERIES.length - 1 && demoRunning) {
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay between queries
+                }
+            }
+            
+            // Demo completed
+            if (demoRunning) {
+                demoProgressBar.style.width = '100%';
+                demoStatus.textContent = 'Demo completed!';
+                setTimeout(() => {
+                    demoProgress.style.display = 'none';
+                    demoButton.disabled = false;
+                    demoButton.textContent = '🎬 Run PGR Demo';
+                    statusText.textContent = 'Connected';
+                    addMessage('assistant', '✅ <strong>Demo completed!</strong><br>All queries executed successfully. You can now try your own queries or run the demo again.', false, false);
+                }, 2000);
+            }
+            
+            demoRunning = false;
+        }
+
+        function stopPGRDemo() {
+            if (!demoRunning) {
+                return;
+            }
+            
+            demoRunning = false;
+            
+            const demoProgress = document.getElementById('demoProgress');
+            const demoButton = document.getElementById('demoButton');
+            const statusText = document.getElementById('statusText');
+            
+            demoProgress.style.display = 'none';
+            demoButton.disabled = false;
+            demoButton.textContent = '🎬 Run PGR Demo';
+            statusText.textContent = 'Connected';
+            
+            const input = document.getElementById('messageInput');
+            input.disabled = false;
+            document.getElementById('sendButton').disabled = false;
+            
+            addMessage('assistant', '⏹️ <strong>Demo stopped</strong><br>Demo was stopped by user. Completed ' + (demoCurrentIndex + 1) + ' queries.', false, false);
         }
     </script>
 </body>

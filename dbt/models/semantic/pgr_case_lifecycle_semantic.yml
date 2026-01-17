@@ -18,7 +18,7 @@ semantic_models:
         type: time
         expr: submitted_time
         type_params:
-          time_granularity: day
+          time_granularity: day  # Default to day; can be overridden in queries via --time-granularity
 
       - name: tenant_id
         type: categorical

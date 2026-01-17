@@ -94,6 +94,10 @@ def compile_where(filters: List[dict]) -> Optional[str]:
         if op in ("=", "!="):
             if not isinstance(val, str):
                 raise ValueError("Filter value must be a string for '=' or '!='.")
+            # Normalize status-like values to uppercase for PGR status dimensions
+            # This handles case mismatches where LLM generates "Closed" but data has "CLOSED"
+            if dim.endswith("__last_status") or dim.endswith("__status"):
+                val = val.upper()
             clauses.append(f"{dim} {op} {_quote(val)}")
 
         elif op == "in":

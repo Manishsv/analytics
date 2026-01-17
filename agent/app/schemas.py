@@ -50,6 +50,7 @@ class PlannedQuery(BaseModel):
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     filters: List[StructuredFilter] = Field(default_factory=list)
+    time_granularity: Optional[str] = Field(default=None, description="Time granularity: day, week, month, year")
     limit: int = 200
 
 
@@ -76,3 +77,4 @@ class NLQResponse(BaseModel):
     plan: PlannedQuery
     execution: QueryResponse
     explanation: QueryExplanation
+    is_top_query: bool = Field(default=False, description="True if this is a 'which X has the most Y' query requiring client-side aggregation")

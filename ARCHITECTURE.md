@@ -37,6 +37,21 @@ The Data Analytics Platform is a modern, cloud-native analytics stack built on o
 - **Guardrails**: AI agent enforces security and performance limits
 
 ---
+## Architecture Rationale
+
+This architecture is designed to solve a recurring problem in government and enterprise analytics: transactional systems are excellent at running operations, but poorly suited for flexible, cross-cutting analytics—especially when many departments, tenants, and services must be compared consistently over time. The platform therefore separates operational truth from analytical truth, and introduces a controlled pathway from raw events to trusted business metrics that can be queried safely—both through dashboards and natural language.
+
+At the core is a simple principle: treat service activity as standardized events, land them in an immutable lake, transform them into stable analytics contracts, and expose them through a semantic layer rather than direct SQL. This makes analytics scalable across services (PGR, Sales, etc.), across tenants (multiple cities), and across time (historical trend analysis), without repeatedly rebuilding bespoke reports or fragile query logic.
+
+The choice of a lakehouse (Iceberg on S3-compatible storage) provides durable, low-cost storage with the key properties analytics teams require: schema evolution, ACID-like consistency, partition pruning, and time travel. Nessie adds versioned cataloging so that datasets can be promoted, audited, and reproduced—particularly useful in regulated or multi-stakeholder environments. Trino provides a fast, flexible SQL execution layer that can query large datasets directly in object storage without proprietary infrastructure.
+
+On top of this, the platform uses the Bronze/Silver/Gold pattern to enforce increasing levels of structure and trust. Bronze preserves raw data for audit and reprocessing; Silver standardizes and validates; Gold produces optimized marts that reflect business grains (case-level, daily funnel, backlog snapshots). This prevents downstream users from repeatedly reinventing transformations and keeps performance predictable.
+
+A critical design decision is the inclusion of a semantic layer (MetricFlow). Without it, every dashboard, report, or agent must encode its own definitions of “complaints,” “resolution rate,” “SLA breach,” “sales,” “growth,” etc.—leading to inconsistency, disputes, and high maintenance. MetricFlow creates a single source of truth for metrics and dimensions, enabling governance, reuse, and controlled evolution of definitions as programs change.
+
+Finally, the platform introduces natural language querying through an AI agent, but with strict guardrails. Rather than allowing an LLM to generate raw SQL against evolving datasets (which is fragile, difficult to govern, and risky), the agent is constrained to selecting approved metrics, dimensions, and filters from the semantic layer, and then executing through MetricFlow. This approach preserves the usability benefits of NLQ while maintaining security, performance controls, and semantic consistency.
+
+In summary, this architecture is not just a technology stack—it is a governance and scale strategy: events to lakehouse, lakehouse to trusted marts, marts to semantic metrics, and metrics to safe self-service access (BI + NLQ). This combination enables multi-tenant service analytics that is auditable, consistent, and extensible as DIGIT services expand and evolve.
 
 ## System Architecture
 
@@ -390,17 +405,27 @@ mf query --metrics pgr_complaints --group-by complaint__ward_id
 
 **Flow**:
 1. Receive NL query from user
-2. LLM generates plan (metrics, dimensions, filters)
-3. Validate plan against MetricFlow catalog
-4. Compile safe WHERE clauses from filters
-5. Execute via MetricFlow
-6. Return results + explanation
+2. LLM generates plan (metrics, dimensions, filters, time_granularity)
+3. Validate plan against MetricFlow catalog (allowlist)
+4. Auto-detect "which X has the most Y" queries and adjust plan
+5. Compile safe WHERE clauses from filters (with case normalization)
+6. Execute via MetricFlow
+7. Post-process results (time aggregation if needed)
+8. Return results + explanation
 
 **API Endpoints**:
 - `GET /health` - Health check
 - `GET /catalog` - List available metrics/dimensions
 - `POST /query` - Direct MetricFlow query
 - `POST /nlq` - Natural language query
+
+**Advanced Features**:
+- **Time Granularity Detection**: Automatically detects "by days/weeks/months/years" and sets appropriate granularity
+- **Top N Query Handling**: Detects "which X has the most Y" queries, aggregates across filter dimensions client-side
+- **Case Sensitivity**: Normalizes status values to uppercase (e.g., "Closed" → "CLOSED")
+- **Rate Limiting**: Token bucket algorithm (60 requests/min, 1000/hour per IP)
+- **Query Explanation**: Returns metric definitions, dimensions used, filters applied, and generated WHERE clause
+- **Structured Logging**: Logs request, plan, execution time, row count for observability
 
 ### 7. Web UI
 
@@ -409,11 +434,30 @@ mf query --metrics pgr_complaints --group-by complaint__ward_id
 **Features**:
 - Chat-like interface
 - Query plan display
-- Formatted table results
-- User-friendly error messages
+- Formatted table results (with automatic sorting and aggregation)
+- User-friendly error messages with actionable suggestions
 - Example queries
+- **PGR Demo Mode**: Automated demo that runs 10 PGR queries sequentially
+- **Persistent Catalog Sidebar**: Always-accessible metrics and dimensions discovery
+- **Dimension Discovery**: Grouped display of available dimensions with usage hints
+- **Time Granularity Support**: Automatic aggregation for week/month/year from day-level data
+- **Top N Queries**: Client-side aggregation for "which X has the most Y" queries
+- **Smart Formatting**: Number formatting, date formatting (ISO → readable), scientific notation conversion
 
 **Technology**: Single-page HTML + JavaScript
+
+**Demo Mode**:
+- One-click button to run 10 pre-configured PGR queries
+- Progress indicator with spinner and progress bar
+- Sequential execution with configurable delays
+- Stop/start controls
+- Perfect for platform demonstrations
+
+**Catalog Features**:
+- Toggleable sidebar (always accessible)
+- Metrics and dimensions grouped by domain (PGR, Sales)
+- Tooltips with usage examples
+- Auto-discovered from MetricFlow catalog
 
 ---
 
@@ -566,6 +610,32 @@ WITH (
 - Referential integrity between layers
 - Accepted values for enumerations
 
+### Testing & Validation
+
+**Test Suite**:
+- **Unit Tests**: Golden prompts, filter compilation, plan validation (`test_nlq_planning.py`)
+- **Integration Tests**: End-to-end HTTP requests (`test_integration.py`)
+- **Comprehensive AI Tests**: 34+ test cases covering all query types (`test_ai_comprehensive.py`)
+  - Basic metric queries
+  - Queries with dimensions and filters
+  - "Which X has the most Y" queries
+  - Time-based queries (days/weeks/months/years)
+  - PGR-specific queries
+  - Sales-specific queries
+  - Edge cases and error handling
+  - Response structure validation
+  - Explanation accuracy
+  - Case sensitivity for filters
+
+**Test Coverage**:
+- Natural language interpretation
+- Query plan generation
+- Filter handling (including case sensitivity)
+- Time granularity detection
+- Top N aggregation
+- Error handling
+- Response formatting
+
 ---
 
 ## Deployment
@@ -677,6 +747,11 @@ DBT_PROFILES_DIR=./dbt
 - [ ] Authentication for Trino/Agent
 - [ ] Query result caching
 - [ ] Additional semantic models (Sales, etc.)
+- [x] PGR demo mode (automated query execution)
+- [x] Dimension discovery UI
+- [x] Comprehensive test suite
+- [x] Time granularity support (day/week/month/year)
+- [x] Top N query aggregation
 
 ### Medium Term
 - [ ] Real-time ingestion (Kafka/Event Streams)
@@ -703,4 +778,26 @@ DBT_PROFILES_DIR=./dbt
 ---
 
 **Last Updated**: January 2025  
-**Version**: 1.0
+**Version**: 1.1
+
+### Recent Updates (v1.1)
+
+**Web UI Enhancements** (January 2025):
+- Added PGR Demo Mode with automated query execution
+- Persistent catalog sidebar with dimension discovery
+- Improved table formatting with automatic sorting
+- Enhanced error messages with actionable suggestions
+- Time granularity aggregation (week/month/year from day-level)
+- Top N query aggregation client-side
+
+**AI Agent Improvements** (January 2025):
+- Case sensitivity normalization for status filters
+- Time granularity detection in NLQ
+- Top N query handling with client-side aggregation
+- Improved error message parsing and translation
+- Structured logging and observability
+
+**Testing** (January 2025):
+- Comprehensive test suite (34+ test cases)
+- Golden prompts for regression testing
+- Integration tests for end-to-end validation
