@@ -24,10 +24,24 @@ FastAPI service that wraps MetricFlow CLI for natural language to SQL queries vi
 
 2. **dbt project configured** with semantic models and metrics
 
-3. **Ollama running** with `gpt-oss:120b-cloud` model:
+3. **Ollama installed and running** with `gpt-oss:120b-cloud` model:
    ```bash
+   # Install Ollama (if not already installed)
+   # macOS: brew install ollama
+   # Linux: curl -fsSL https://ollama.com/install.sh | sh
+   
+   # Start Ollama service (keep this running)
    ollama serve
+   
+   # In another terminal, pull the required model
    ollama pull gpt-oss:120b-cloud
+   
+   # Verify model is installed
+   ollama list
+   # You should see: gpt-oss:120b-cloud
+   
+   # Note: You can use other models by setting OLLAMA_MODEL environment variable
+   # Example: export OLLAMA_MODEL=llama3.2
    ```
 
 4. **Python 3.10** with MetricFlow installed (see Setup section below)
@@ -202,6 +216,20 @@ The web UI connects to the agent service at `http://localhost:8000` by default.
 - `DBT_PROFILES_DIR`: Path to dbt profiles (default: `../dbt`)
 - `OLLAMA_BASE_URL`: Ollama API base URL (default: `http://localhost:11434`)
 - `OLLAMA_MODEL`: Ollama model name (default: `gpt-oss:120b-cloud`)
+  
+  **Important**: The default model `gpt-oss:120b-cloud` is **required** for the PGR demo and tested workflows. You can try other models, but ensure they support JSON mode and structured output:
+  
+  ```bash
+  # Pull another model (optional, not required for PGR demo)
+  ollama pull llama3.2
+  ollama pull mistral
+  
+  # Set environment variable before starting agent
+  export OLLAMA_MODEL=llama3.2
+  uvicorn app.main:app --reload --port 8000
+  ```
+  
+  **Note**: Different models may produce different query plans. For production use, test thoroughly with your chosen model.
 
 ## Advanced Features
 

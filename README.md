@@ -51,20 +51,88 @@ pip install dbt-trino metricflow[trino]
 # macOS: brew install ollama
 # Linux: curl -fsSL https://ollama.com/install.sh | sh
 
-# Start Ollama service
+# Start Ollama service (keep this running)
 ollama serve
 
-# Pull the model (in another terminal)
+# In another terminal, pull the required model
 ollama pull gpt-oss:120b-cloud
+
+# Verify model is installed
+ollama list
+# You should see: gpt-oss:120b-cloud
+
+# Note: You can try other models by setting OLLAMA_MODEL environment variable
+# Example: export OLLAMA_MODEL=llama3.2  (ensure it's compatible)
 ```
 
-### Step 4: Run dbt Models
+### Step 4: Setup Sample PGR Data
 
 ```bash
 # Ensure you're in the virtual environment
 source .venv310/bin/activate
 
-# Run dbt models to create Silver and Gold layers
+# Install additional dependencies if needed
+pip install pandas  # Required for data generation scripts
+
+# Create Bronze table if it doesn't exist (one-time setup)
+docker exec -it dap-trino trino --server http://trino:8080 << 'EOF'
+CREATE SCHEMA IF NOT EXISTS iceberg.bronze;
+
+CREATE TABLE IF NOT EXISTS iceberg.bronze.service_events_raw (
+    event_date DATE,
+    event_time TIMESTAMP,
+    tenant_id VARCHAR,
+    service VARCHAR,
+    entity_type VARCHAR,
+    entity_id VARCHAR,
+    event_type VARCHAR,
+    status VARCHAR,
+    actor_type VARCHAR,
+    actor_id VARCHAR,
+    channel VARCHAR,
+    ward_id VARCHAR,
+    locality_id VARCHAR,
+    attributes_json VARCHAR,
+    raw_payload VARCHAR
+)
+WITH (
+    format = 'PARQUET',
+    partitioning = ARRAY['event_date', 'service']
+);
+EOF
+
+# Generate historical PGR data (100,000+ records spanning 2 years)
+cd scripts
+python3 generate_pgr_historical.py
+
+# This creates: /tmp/pgr_events_historical_2yr.csv
+# Verify with: ls -lh /tmp/pgr_events_historical_2yr.csv
+
+# Copy/rename file to match batch_insert_pgr.py expectation, or update script
+# Option 1: Update batch_insert_pgr.py to use the correct filename
+# Option 2: Copy the file:
+cp /tmp/pgr_events_historical_2yr.csv /tmp/pgr_events_100k.csv
+
+# Generate batch insert SQL from CSV (reads /tmp/pgr_events_100k.csv)
+python3 batch_insert_pgr.py
+
+# This creates: /tmp/batch_insert_pgr.sql
+# Verify with: ls -lh /tmp/batch_insert_pgr.sql
+
+# Execute batch inserts via Trino
+docker exec -i dap-trino trino --server http://trino:8080 < /tmp/batch_insert_pgr.sql
+
+# Verify data was loaded (should show ~100,000 rows)
+docker exec -it dap-trino trino --server http://trino:8080 -e "SELECT COUNT(*) FROM iceberg.bronze.service_events_raw WHERE service = 'PGR';"
+```
+
+### Step 5: Run dbt Models
+
+```bash
+# Ensure you're in the virtual environment
+source .venv310/bin/activate
+
+# Run dbt models to create Silver and Gold layers from Bronze data
 cd dbt
 dbt run
 
@@ -72,7 +140,7 @@ dbt run
 dbt parse
 ```
 
-### Step 5: Start AI Agent Service
+### Step 6: Start AI Agent Service
 
 ```bash
 # Install FastAPI dependencies
@@ -89,7 +157,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000
 INFO:     Loaded allowlist: X metrics, Y dimensions
 ```
 
-### Step 6: Launch Web UI & Run PGR Demo
+### Step 7: Launch Web UI & Run PGR Demo
 
 ```bash
 # Option 1: Open directly in browser
