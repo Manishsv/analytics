@@ -1,0 +1,119 @@
+version: 2
+
+# Advanced dbt tests for data quality validation
+# These tests validate business rules and data integrity beyond basic not_null checks
+
+models:
+  # Silver Layer Tests
+  # Note: silver_pgr_events tests are in models/silver/pgr/silver_pgr_events.yml
+  # Note: gold_pgr_case_lifecycle tests are in models/gold/pgr/gold_pgr_case_lifecycle.yml
+
+  - name: silver_sales
+    description: "Typed sales transactions"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - period_yyyymm
+              - pack_id
+              - geo_id
+              - channel_id
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "period_yyyymm ~ '^[0-9]{6}$'"
+          config:
+            severity: error
+            description: "Period must be in YYYYMM format"
+      - dbt_utils.expression_is_true:
+          expression: "value_lc >= 0"
+          config:
+            severity: error
+            description: "Sales value cannot be negative"
+      - dbt_utils.expression_is_true:
+          expression: "units >= 0 and standard_units >= 0"
+          config:
+            severity: error
+            description: "Volume cannot be negative"
+
+  # Gold Layer Tests - PGR
+  # Note: gold_pgr_case_lifecycle tests are in models/gold/pgr/gold_pgr_case_lifecycle.yml
+
+  - name: gold_pgr_funnel_daily
+    description: "Daily funnel metrics"
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "submitted_cases >= 0 and resolved_cases >= 0 and closed_cases >= 0"
+          config:
+            severity: error
+            description: "Case counts cannot be negative"
+      - dbt_utils.expression_is_true:
+          expression: "resolved_cases <= submitted_cases"
+          config:
+            severity: warn
+            description: "Resolved cases should not exceed submitted cases"
+            where: "submitted_cases > 0"
+      - dbt_utils.expression_is_true:
+          expression: "closed_cases <= submitted_cases"
+          config:
+            severity: warn
+            description: "Closed cases should not exceed submitted cases"
+            where: "submitted_cases > 0"
+
+  - name: gold_pgr_backlog_daily
+    description: "Daily backlog snapshots"
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "open_cases >= 0"
+          config:
+            severity: error
+            description: "Open cases cannot be negative"
+      - dbt_utils.accepted_values:
+          arguments:
+            column_name: status
+            values: ['OPEN', 'ASSIGNED', 'RESOLVED', 'REOPENED']
+          config:
+            severity: error
+            description: "Backlog only includes open statuses"
+            where: "open_cases > 0"
+
+  - name: gold_pgr_sla_breaches
+    description: "SLA breach analysis"
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "breach_hours is null or breach_hours >= 0"
+          config:
+            severity: error
+            description: "Breach hours cannot be negative"
+      - dbt_utils.expression_is_true:
+          expression: "breach_flag = true implies breach_hours > 0"
+          config:
+            severity: error
+            description: "Breach flag true must have positive breach hours"
+            where: "breach_flag = true"
+
+  # Gold Layer Tests - Sales
+  - name: gold_sales_monthly
+    description: "Monthly sales aggregates"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - period_date
+              - geo_id
+              - channel_id
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "value_lc >= 0 and standard_units >= 0 and units >= 0"
+          config:
+            severity: error
+            description: "Sales values and volumes cannot be negative"
+      - dbt_utils.expression_is_true:
+          expression: "period_date >= date('2020-01-01')"
+          config:
+            severity: warn
+            description: "Period dates should be from 2020 onwards"
+
+# Sources are defined in models/bronze/sources.yml
+# Add source-level tests there if needed

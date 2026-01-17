@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: silver_pgr_events
+    description: "Typed PGR events with extracted attributes"
+    columns:
+      - name: complaint_id
+        description: "Unique complaint identifier"
+        tests:
+          - not_null
+      - name: event_type
+        description: "Type of event (CaseSubmitted, CaseAssigned, etc.)"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: |
+                (event_type = 'CaseSubmitted' and status in ('OPEN', 'ASSIGNED')) or
+                (event_type = 'CaseAssigned' and status = 'ASSIGNED') or
+                (event_type = 'CaseResolved' and status = 'RESOLVED') or
+                (event_type = 'CaseClosed' and status = 'CLOSED') or
+                (event_type = 'CaseReopened' and status = 'REOPENED')
+              config:
+                severity: warn
+                description: "Status should match event type"
+      - name: status
+        description: "Status after this event"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['OPEN', 'ASSIGNED', 'RESOLVED', 'CLOSED', 'REOPENED']
+      - name: priority
+        description: "Complaint priority"
+        tests:
+          - accepted_values:
+              values: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+      - name: sla_hours
+        description: "SLA hours for this complaint"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: |
+                (priority = 'CRITICAL' and sla_hours = 4) or
+                (priority = 'HIGH' and sla_hours = 24) or
+                (priority = 'MEDIUM' and sla_hours = 72) or
+                (priority = 'LOW' and sla_hours = 168) or
+                priority is null or sla_hours is null
+              config:
+                severity: warn
+                description: "SLA hours should match expected values by priority"

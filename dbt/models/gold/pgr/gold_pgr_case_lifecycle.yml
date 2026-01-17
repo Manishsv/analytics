@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: gold_pgr_case_lifecycle
+    description: "One row per complaint with lifecycle metrics"
+    columns:
+      - name: complaint_id
+        description: "Unique complaint identifier"
+        tests:
+          - not_null
+      - name: submitted_time
+        description: "First CaseSubmitted event timestamp"
+        tests:
+          - not_null
+      - name: t_submit_to_resolve_hours
+        description: "Time to resolve in hours"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "t_submit_to_resolve_hours is null or t_submit_to_resolve_hours >= 0"
+              config:
+                severity: warn
+          - dbt_utils.expression_is_true:
+              expression: |
+                t_submit_to_resolve_hours is null or
+                sla_hours is null or
+                t_submit_to_resolve_hours <= (sla_hours * 2)
+              config:
+                severity: warn
+                description: "TAT should be within 2x SLA for resolved cases"
+      - name: sla_hours
+        description: "SLA hours for this complaint"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: |
+                (priority = 'CRITICAL' and sla_hours = 4) or
+                (priority = 'HIGH' and sla_hours = 24) or
+                (priority = 'MEDIUM' and sla_hours = 72) or
+                (priority = 'LOW' and sla_hours = 168) or
+                priority is null or sla_hours is null
+              config:
+                severity: warn
+                description: "SLA hours should match expected values by priority"

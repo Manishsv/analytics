@@ -5,6 +5,8 @@ config-version: 2
 profile: "dap"
 
 model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
 
 models:
   dap:
@@ -22,3 +24,8 @@ models:
       time_spine:
         +schema: gold
         +materialized: table
+
+vars:
+  # Multi-tenant isolation variable
+  # Set via: dbt run --vars '{"tenant_id": "TENANT_001"}'
+  tenant_id: null

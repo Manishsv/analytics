@@ -755,9 +755,9 @@ DBT_PROFILES_DIR=./dbt
 
 ### Medium Term
 - [ ] Real-time ingestion (Kafka/Event Streams)
-- [ ] Materialized views for common queries
-- [ ] Multi-tenant data isolation
-- [ ] Advanced dbt tests (custom tests)
+- [x] Materialized views for common queries (pre-aggregated tables: ward summary, monthly trends, ward+channel, sales geo)
+- [x] Multi-tenant data isolation (tenant_filter macro, RLS patterns)
+- [x] Advanced dbt tests (custom tests: SLA validation, TAT reasonableness, status transitions)
 
 ### Long Term
 - [ ] Multi-region deployment
