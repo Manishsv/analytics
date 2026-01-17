@@ -180,13 +180,33 @@ python3 -m http.server 8080
    - Resolution rates and SLA breaches
    - Average time to resolve
 
-### Step 7: Access Services
+### Step 7: Initialize Superset (Optional - for BI Dashboards)
+
+```bash
+# Initialize Superset database (one-time setup)
+docker exec -it dap-superset superset db upgrade
+
+# Create admin user
+docker exec -it dap-superset superset fab create-admin \
+  --username admin \
+  --firstname Admin \
+  --lastname User \
+  --email admin@example.com \
+  --password admin
+
+# Initialize Superset
+docker exec -it dap-superset superset init
+```
+
+See **[SUPERSET_SETUP.md](SUPERSET_SETUP.md)** for complete PGR dashboard configuration guide.
+
+### Step 8: Access Services
 
 - **Web UI**: http://localhost:8080 (after starting HTTP server)
 - **Agent API**: http://localhost:8000
 - **MinIO Console**: http://localhost:9001 (login with `.env` credentials)
 - **Trino UI**: http://localhost:8090
-- **Superset**: http://localhost:8088 (optional)
+- **Superset**: http://localhost:8088 (username: `admin`, password: `admin`)
 
 ## Smoke Test
 
@@ -232,6 +252,7 @@ SELECT * FROM iceberg.bronze.sample_sales;
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture and design (v1.1)
 - **[INGESTION.md](INGESTION.md)** - Data ingestion workflows and examples
 - **[NEXT_STEPS.md](NEXT_STEPS.md)** - Roadmap and future enhancements
+- **[SUPERSET_SETUP.md](SUPERSET_SETUP.md)** - Complete Superset setup guide for PGR dashboards
 - **[dbt/models/pgr_README.md](dbt/models/pgr_README.md)** - PGR reference implementation guide
 - **[agent/README.md](agent/README.md)** - AI Agent service documentation with Getting Started guide
 
