@@ -216,6 +216,7 @@ The web UI connects to the agent service at `http://localhost:8000` by default.
 - `DBT_PROFILES_DIR`: Path to dbt profiles (default: `../dbt`)
 - `OLLAMA_BASE_URL`: Ollama API base URL (default: `http://localhost:11434`)
 - `OLLAMA_MODEL`: Ollama model name (default: `gpt-oss:120b-cloud`)
+- `API_KEY`: API key for Bearer token authentication (optional, disables auth if not set)
   
   **Important**: The default model `gpt-oss:120b-cloud` is **required** for the PGR demo and tested workflows. You can try other models, but ensure they support JSON mode and structured output:
   
@@ -240,6 +241,8 @@ The web UI connects to the agent service at `http://localhost:8000` by default.
 - **Top N Query Handling**: Client-side aggregation for "which X has the most Y" queries
 - **Case Sensitivity**: Automatic normalization for status filters (e.g., "Closed" → "CLOSED")
 - **Query Explanation**: Returns metric definitions, dimensions, and filters for audit
+- **Query Caching**: LRU cache with TTL (5 minutes) for `/nlq` and `/query` endpoints
+- **API Key Authentication**: Bearer token authentication for API endpoints (optional)
 
 ## Guardrails
 
@@ -252,7 +255,16 @@ The web UI connects to the agent service at `http://localhost:8000` by default.
 
 ## Testing
 
+### Agent Service Tests
+
 See [tests/README.md](tests/README.md) for comprehensive test suite documentation.
+
+### Platform Testing
+
+For testing other platform components, see:
+- **[TESTING_REALTIME.md](../TESTING_REALTIME.md)** - Real-time ingestion pipeline testing (Kafka/RedPanda consumer)
+- **[TESTING_MULTITENANCY.md](../TESTING_MULTITENANCY.md)** - Multi-tenant data isolation testing
+- **[SUPERSET_SETUP.md](../SUPERSET_SETUP.md)** - Apache Superset configuration and dashboard setup
 
 ### Quick Test Commands
 
@@ -310,3 +322,13 @@ pytest tests/ --cov=app --cov-report=html
 - Verify semantic models are defined in dbt
 - Check Trino connection: `docker-compose ps trino`
 - Review agent logs for detailed error messages
+
+## Related Documentation
+
+- **[README.md](../README.md)** - Platform overview and quick start guide
+- **[ARCHITECTURE.md](../ARCHITECTURE.md)** - Detailed architecture documentation
+- **[SUPERSET_SETUP.md](../SUPERSET_SETUP.md)** - Apache Superset configuration guide
+- **[TESTING_REALTIME.md](../TESTING_REALTIME.md)** - Real-time ingestion testing guide
+- **[TESTING_MULTITENANCY.md](../TESTING_MULTITENANCY.md)** - Multi-tenant testing guide
+- **[ENHANCEMENTS_V1.2.md](../ENHANCEMENTS_V1.2.md)** - Short-term enhancements (PostgreSQL, caching, auth)
+- **[ENHANCEMENTS_V1.3.md](../ENHANCEMENTS_V1.3.md)** - Medium-term enhancements (dbt tests, materialized views, multi-tenancy)

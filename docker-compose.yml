@@ -105,7 +105,74 @@ services:
       - superset_home:/app/superset_home
       - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
 
+  # RedPanda for real-time event streaming (Kafka-compatible, no Zookeeper needed)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: dap-redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr
+      - internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr
+      - internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr
+      - internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr
+      - redpanda:33145
+      - --advertise-rpc-addr
+      - redpanda:33145
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --mode
+      - dev-container
+      - --default-log-level=info
+    ports:
+      - "19092:19092"  # External Kafka API
+      - "18081:18081"  # External Schema Registry
+      - "18082:18082"  # External Pandaproxy
+      - "9644:9644"    # Admin API
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Kafka consumer service for real-time ingestion to Bronze (works with RedPanda)
+  kafka-consumer:
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile
+    container_name: dap-kafka-consumer
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      trino:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-pgr-events}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-bronze-ingestion}
+      TRINO_HOST: trino
+      TRINO_PORT: 8080
+      TRINO_USER: ${TRINO_USER:-trino}
+      BATCH_SIZE: ${BATCH_SIZE:-100}
+      FLUSH_INTERVAL_SEC: ${FLUSH_INTERVAL_SEC:-5}
+    volumes:
+      - ./ingestion:/app
+    restart: unless-stopped
+
 volumes:
   minio_data:
   superset_home:
   postgres_data:
+  redpanda_data:

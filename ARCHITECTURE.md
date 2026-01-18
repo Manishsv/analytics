@@ -472,6 +472,9 @@ mf query --metrics pgr_complaints --group-by complaint__ward_id
    │                        │
    │                        ├─► Batch INSERT ──► iceberg.bronze.*
    │                        │
+   ├─► Kafka Producer ──► RedPanda Topic ──► Kafka Consumer ──► Trino ──► iceberg.bronze.*
+   │                        (Real-time streaming, Kafka-compatible)
+   │
    └─► API/Stream ──────────┘   (via Trino)
 ```
 
@@ -610,6 +613,40 @@ WITH (
 - Referential integrity between layers
 - Accepted values for enumerations
 
+### Multi-Tenant Data Isolation
+
+**Approach**: Application-level tenant filtering using dbt variables and macros.
+
+**Implementation**:
+- **`tenant_filter` Macro**: Row-level security filtering in dbt models (`dbt/macros/tenant_filter.sql`)
+- **Tenant Variable**: Passed via `--vars '{"tenant_id": "TENANT_001"}'` to dbt commands
+- **Scope**: Model-level (materialized views, transformations)
+
+**Usage Pattern**:
+```sql
+-- In any dbt model
+SELECT *
+FROM {{ ref('gold_pgr_case_lifecycle') }}
+WHERE {{ tenant_filter() }}
+  AND ward_id is not null
+```
+
+**Example Models**:
+- `mv_pgr_ward_summary_tenant` - Tenant-isolated materialized view
+- Automatically filters by `tenant_id` when variable is set
+
+**Testing**: See `TESTING_MULTITENANCY.md` for detailed testing guide.
+
+**Production Considerations**:
+- Application layer must pass `tenant_id` variable per user/session
+- Consider tenant-specific views for each tenant (e.g., `gold.mv_pgr_ward_summary_TENANT_001`)
+- For PostgreSQL-backed systems, use native Row-Level Security (RLS)
+- API layer should enforce tenant context before querying
+
+**Limitations**:
+- Current implementation: Application-level filtering (no database-level enforcement)
+- Future: Database-level RLS for stronger isolation guarantees
+
 ### Testing & Validation
 
 **Test Suite**:
@@ -635,6 +672,7 @@ WITH (
 - Top N aggregation
 - Error handling
 - Response formatting
+- Multi-tenant isolation (see `TESTING_MULTITENANCY.md`)
 
 ---
 
@@ -754,7 +792,7 @@ DBT_PROFILES_DIR=./dbt
 - [x] Top N query aggregation
 
 ### Medium Term
-- [ ] Real-time ingestion (Kafka/Event Streams)
+- [x] Real-time ingestion (Kafka/Event Streams with consumer service)
 - [x] Materialized views for common queries (pre-aggregated tables: ward summary, monthly trends, ward+channel, sales geo)
 - [x] Multi-tenant data isolation (tenant_filter macro, RLS patterns)
 - [x] Advanced dbt tests (custom tests: SLA validation, TAT reasonableness, status transitions)

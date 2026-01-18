@@ -130,6 +130,142 @@ cur.execute("""
 conn.commit()
 ```
 
+### Method 4: Real-Time Ingestion via Kafka (Recommended for Production Streams)
+
+For real-time event streaming from applications, use Kafka to buffer events before writing to Bronze tables:
+
+#### Architecture
+
+```
+Application → Kafka Topic → Kafka Consumer → Trino → iceberg.bronze.*
+```
+
+#### Step 1: Start RedPanda Services
+
+```bash
+# Start RedPanda (Kafka-compatible, no Zookeeper needed) and consumer service
+docker compose up -d redpanda kafka-consumer
+
+# Wait for services to be healthy
+docker compose ps
+```
+
+#### Step 2: Publish Events to Kafka
+
+**Option A: Use Python Producer Script**
+
+```bash
+# Install dependencies
+pip install kafka-python
+
+# Run producer (generates sample PGR events)
+python scripts/kafka_producer.py
+```
+
+**Option B: Use RedPanda CLI (rpk)**
+
+```bash
+# Create topic (if not exists)
+docker exec dap-redpanda rpk topic create pgr-events --partitions 1 --replicas 1
+
+# Publish event via console producer
+echo '{"event_date":"2024-12-17","event_time":"2024-12-17 10:00:00","tenant_id":"TENANT_001","service":"PGR","entity_type":"complaint","entity_id":"CMP_001","event_type":"CaseSubmitted","status":"OPEN","actor_type":"CITIZEN","actor_id":"CIT_001","channel":"WEB","ward_id":"WARD_001","locality_id":"LOC_001","attributes_json":{"complaint_type":"Water Supply","priority":"MEDIUM","sla_hours":72},"raw_payload":null}' | \
+  docker exec -i dap-redpanda rpk topic produce pgr-events --format json
+```
+
+**Option C: Use Kafka Producer from Application (RedPanda is Kafka-compatible)**
+
+```python
+from kafka import KafkaProducer
+import json
+
+# RedPanda is fully Kafka protocol compatible
+producer = KafkaProducer(
+    bootstrap_servers=["localhost:19092"],  # External port for host access
+    value_serializer=lambda v: json.dumps(v).encode("utf-8")
+)
+
+event = {
+    "event_date": "2024-12-17",
+    "event_time": "2024-12-17 10:00:00",
+    "tenant_id": "TENANT_001",
+    "service": "PGR",
+    "entity_type": "complaint",
+    "entity_id": "CMP_001",
+    "event_type": "CaseSubmitted",
+    "status": "OPEN",
+    # ... other fields
+}
+
+producer.send("pgr-events", value=event)
+producer.flush()
+```
+
+#### Step 3: Consumer Automatically Writes to Bronze
+
+The `kafka-consumer` service automatically:
+- Consumes events from RedPanda topic (`pgr-events`) - RedPanda is Kafka protocol compatible
+- Validates event structure
+- Batches events (default: 100 events or 5 seconds)
+- Inserts batches into `iceberg.bronze.service_events_raw` via Trino
+- Commits Kafka offsets after successful insert
+
+**Monitor Consumer Logs**:
+
+```bash
+# View consumer logs
+docker logs -f dap-kafka-consumer
+
+# Expected output:
+# [INFO] Connected to Kafka (RedPanda)
+# [INFO] Starting consumer loop (batch_size=100, flush_interval=5s)...
+# [INFO] ✅ Inserted 100 events into Bronze table
+```
+
+#### Configuration
+
+Environment variables (in `docker-compose.yml` or `.env`):
+
+```bash
+KAFKA_TOPIC=pgr-events              # RedPanda/Kafka topic name
+KAFKA_GROUP_ID=bronze-ingestion     # Consumer group ID
+BATCH_SIZE=100                       # Events per batch
+FLUSH_INTERVAL_SEC=5                # Max seconds between flushes
+TRINO_HOST=trino                     # Trino hostname
+TRINO_PORT=8080                      # Trino port
+TRINO_USER=trino                     # Trino user
+```
+
+#### Verification
+
+```bash
+# Check events in Bronze table
+docker exec -it dap-trino trino --server http://trino:8080
+
+# Query recent events
+SELECT 
+    event_date, 
+    event_time, 
+    entity_id, 
+    event_type, 
+    status
+FROM iceberg.bronze.service_events_raw
+WHERE event_date = CURRENT_DATE
+ORDER BY event_time DESC
+LIMIT 10;
+
+# Check consumer lag using RedPanda CLI (rpk)
+docker exec dap-redpanda rpk group describe bronze-ingestion
+```
+
+#### Benefits
+
+- **Real-Time**: Events ingested within seconds of publishing
+- **Resilient**: Kafka buffers events if downstream services are unavailable
+- **Scalable**: Multiple consumers can process different partitions
+- **Batch Optimization**: Reduces Trino insert overhead
+- **Exactly-Once**: Kafka consumer commits offsets after successful insert
+
 ## After Ingestion: Transform with dbt
 
 Once data is in Bronze, run dbt to build Silver and Gold layers:
